@@ -10,16 +10,16 @@
     <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
     <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
     
-    <!-- Libraries - dengan fallback loading -->
+    <!-- Libraries - untuk EPUB butuh JSZip -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
     
     <!-- PDF.js - multiple CDN fallback -->
     <script>
-        // Coba load PDF.js dari beberapa sumber
+        // Load PDF.js dengan fallback
         function loadPDFJS() {
             return new Promise(function(resolve, reject) {
-                // Cek apakah sudah ada
                 if (typeof pdfjsLib !== 'undefined') {
                     console.log('✅ PDF.js sudah ada');
                     resolve();
@@ -63,8 +63,34 @@
             });
         }
 
-        // Load secara async
+        // Load JSZip juga (untuk epub.js)
+        function loadJSZip() {
+            return new Promise(function(resolve, reject) {
+                if (typeof JSZip !== 'undefined') {
+                    console.log('✅ JSZip sudah ada');
+                    resolve();
+                    return;
+                }
+                var script = document.createElement('script');
+                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+                script.onload = function() {
+                    if (typeof JSZip !== 'undefined') {
+                        console.log('✅ JSZip dimuat');
+                        resolve();
+                    } else {
+                        reject(new Error('JSZip gagal dimuat'));
+                    }
+                };
+                script.onerror = function() {
+                    reject(new Error('JSZip gagal dimuat'));
+                };
+                document.head.appendChild(script);
+            });
+        }
+
+        // Gabungkan loading
         window.PDFJS_LOADED = loadPDFJS();
+        window.JSZIP_LOADED = loadJSZip();
     </script>
     
     <!-- Styles -->

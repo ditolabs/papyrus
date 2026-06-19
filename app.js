@@ -1,16 +1,15 @@
 /* ========================================
-   Papyrus Reader - Single File App v3
-   FIX: PDF.js fallback loading
+   Papyrus Reader - Single File App v4
+   FIX: JSZip + PDF Worker
    ======================================== */
 
 (function() {
     'use strict';
 
     // ============================================================
-    // 0. WAIT FOR PDF.JS LOADING
+    // 0. WAIT FOR LIBRARIES
     // ============================================================
 
-    // Tunggu PDF.js selesai dimuat
     function waitForPDFJS() {
         return new Promise(function(resolve) {
             if (typeof pdfjsLib !== 'undefined') {
@@ -18,49 +17,47 @@
                 resolve();
                 return;
             }
-
-            // Coba cek setiap 200ms selama 10 detik
             var attempts = 0;
-            var maxAttempts = 50;
+            var maxAttempts = 30;
             var interval = setInterval(function() {
                 attempts++;
                 if (typeof pdfjsLib !== 'undefined') {
                     clearInterval(interval);
-                    console.log('✅ PDF.js tersedia setelah', attempts * 200, 'ms');
+                    console.log('✅ PDF.js tersedia');
                     resolve();
                 } else if (attempts >= maxAttempts) {
                     clearInterval(interval);
-                    console.warn('⚠️ PDF.js tidak ditemukan, menggunakan fallback manual');
-                    // Coba load manual
-                    var script = document.createElement('script');
-                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.min.js';
-                    script.onload = function() {
-                        if (typeof pdfjsLib !== 'undefined') {
-                            console.log('✅ PDF.js dimuat via fallback');
-                            resolve();
-                        } else {
-                            // Buat dummy pdfjsLib agar tidak error
-                            window.pdfjsLib = {
-                                GlobalWorkerOptions: { workerSrc: '' },
-                                getDocument: function() {
-                                    throw new Error('PDF.js tidak tersedia');
-                                }
-                            };
-                            console.error('❌ PDF.js gagal dimuat, PDF tidak akan berfungsi');
-                            resolve();
-                        }
+                    console.warn('⚠️ PDF.js tidak ditemukan');
+                    // Buat dummy
+                    window.pdfjsLib = {
+                        GlobalWorkerOptions: { workerSrc: '' },
+                        getDocument: function() { throw new Error('PDF.js tidak tersedia'); }
                     };
-                    script.onerror = function() {
-                        window.pdfjsLib = {
-                            GlobalWorkerOptions: { workerSrc: '' },
-                            getDocument: function() {
-                                throw new Error('PDF.js tidak tersedia');
-                            }
-                        };
-                        console.error('❌ PDF.js gagal dimuat');
-                        resolve();
-                    };
-                    document.head.appendChild(script);
+                    resolve();
+                }
+            }, 200);
+        });
+    }
+
+    function waitForJSZip() {
+        return new Promise(function(resolve) {
+            if (typeof JSZip !== 'undefined') {
+                console.log('✅ JSZip sudah tersedia');
+                resolve();
+                return;
+            }
+            var attempts = 0;
+            var maxAttempts = 30;
+            var interval = setInterval(function() {
+                attempts++;
+                if (typeof JSZip !== 'undefined') {
+                    clearInterval(interval);
+                    console.log('✅ JSZip tersedia');
+                    resolve();
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(interval);
+                    console.warn('⚠️ JSZip tidak ditemukan');
+                    resolve();
                 }
             }, 200);
         });
@@ -578,7 +575,7 @@
     }
 
     // ============================================================
-    // 9. ENGINES (FIX PDF - dengan fallback)
+    // 9. ENGINES (FIX EPUB + PDF WORKER)
     // ============================================================
 
     class BaseEngine {
@@ -597,7 +594,7 @@
         isLoaded() { return this.loaded; }
     }
 
-    // --- EPUB ---
+    // --- EPUB (fix: tunggu JSZip) ---
     class EPUBEngine extends BaseEngine {
         constructor(file) {
             super(file);
@@ -607,6 +604,14 @@
         }
         async load() {
             try {
+                // Tunggu JSZip tersedia
+                await waitForJSZip();
+
+                // Pastikan ePub tersedia
+                if (typeof ePub === 'undefined') {
+                    throw new Error('epub.js tidak tersedia');
+                }
+
                 this.book = ePub(this.file);
                 await this.book.ready;
                 const meta = this.book.package.metadata;
@@ -632,6 +637,7 @@
                 this.loaded = true;
                 return this;
             } catch (error) {
+                console.error('❌ Gagal load EPUB:', error);
                 throw new Error('Gagal memuat file EPUB: ' + error.message);
             }
         }
@@ -639,7 +645,7 @@
         async getPage(pageNum) { return this.rawContent; }
     }
 
-    // --- PDF (FIXED - dengan pengecekan pdfjsLib) ---
+    // --- PDF (fix worker loading) ---
     class PDFEngine extends BaseEngine {
         constructor(file) {
             super(file);
@@ -650,19 +656,27 @@
 
         async load() {
             try {
-                // Tunggu PDF.js tersedia
                 await waitForPDFJS();
 
                 if (typeof pdfjsLib === 'undefined' || !pdfjsLib.getDocument) {
-                    throw new Error('pdfjsLib tidak tersedia. Pastikan PDF.js dimuat.');
+                    throw new Error('pdfjsLib tidak tersedia');
                 }
 
-                // Set worker
+                // Set worker dengan fallback
                 try {
+                    // Coba worker dari CDN utama
                     pdfjsLib.GlobalWorkerOptions.workerSrc = 
                         'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js';
                 } catch (e) {
-                    console.warn('Gagal set worker PDF:', e);
+                    console.warn('Gagal set worker default, coba fallback:', e);
+                    // Fallback: gunakan worker dari jsdelivr
+                    try {
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = 
+                            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.js';
+                    } catch (e2) {
+                        console.warn('Gagal set worker fallback:', e2);
+                        // Biarkan kosong, pdf.js akan mencoba sendiri
+                    }
                 }
 
                 console.log('📄 Memuat PDF...');
@@ -1060,7 +1074,7 @@
     }
 
     // ============================================================
-    // 12. FEATURES (Bookmark, Highlight, Search, Settings, TTS)
+    // 12. FEATURES
     // ============================================================
 
     class BookmarkFeature {
@@ -2053,14 +2067,14 @@
 
     async function init() {
         try {
-            // Tunggu PDF.js terload dulu
-            await waitForPDFJS();
-            
+            // Tunggu semua library
+            await Promise.all([waitForPDFJS(), waitForJSZip()]);
+
             loadTheme();
             getReaderSettings();
             await renderLibrary();
             await updateFooterStats();
-            console.log('📖 Papyrus Reader - v3 (FIX PDF) siap!');
+            console.log('📖 Papyrus Reader - v4 (FIX) siap!');
         } catch (error) {
             console.error('Gagal inisialisasi:', error);
             showToast('Gagal memuat aplikasi', 'error');
