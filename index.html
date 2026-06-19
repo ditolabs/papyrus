@@ -217,32 +217,40 @@
     <!-- Hidden file input -->
     <input type="file" id="fileInput" accept=".epub,.pdf,.txt,.md" multiple style="display:none">
 
-    <!-- ===== SCRIPTS - ORDER PENTING ===== -->
-    <!-- Utility -->
+    <!-- ============================================================ -->
+    <!-- ===== SCRIPTS - URUTAN PENTING! ===== -->
+    <!-- ============================================================ -->
+
+    <!-- 1. UTILITY (helpers) -->
     <script src="js/utils/helpers.js"></script>
 
-    <!-- Engines -->
+    <!-- 2. ENGINES (base dulu, lalu turunannya) -->
     <script src="js/engines/base.js"></script>
     <script src="js/engines/epub.js"></script>
     <script src="js/engines/pdf.js"></script>
     <script src="js/engines/txt.js"></script>
     <script src="js/engines/markdown.js"></script>
 
-    <!-- Core -->
+    <!-- 3. CORE (paginator & flipbook) -->
     <script src="js/paginator.js"></script>
     <script src="js/flipbook.js"></script>
 
-    <!-- Features -->
+    <!-- 4. FEATURES (bookmark, highlight, search, settings, tts) -->
     <script src="js/features/bookmark.js"></script>
     <script src="js/features/highlight.js"></script>
     <script src="js/features/search.js"></script>
     <script src="js/features/settings.js"></script>
     <script src="js/features/tts.js"></script>
 
-    <!-- READER - HARUS DIMUAT SETELAH FEATURES -->
+    <!-- 5. READER (harus SEBELUM app.js) -->
     <script src="js/reader.js"></script>
 
-    <!-- Main App - HARUS TERAKHIR -->
+    <!-- 6. MAIN APP (harus PALING BAWAH) -->
     <script src="app.js"></script>
+
+    <!-- ============================================================ -->
+    <!-- AKHIR SCRIPTS -->
+    <!-- ============================================================ -->
+
 </body>
 </html>
