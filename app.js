@@ -1,6 +1,6 @@
 /* ========================================
-   Papyrus Reader - Single File App
-   Semua kode digabung untuk kompatibilitas Android
+   Papyrus Reader - Single File App v2
+   FIX: PDF Engine & Rendering
    ======================================== */
 
 (function() {
@@ -456,7 +456,7 @@
                     <div class="book-card" data-id="${book.id}">
                         <div class="book-cover">
                             <span>${icon}</span>
-                            <span class="format-badge">${book.format}</span>
+                        <span class="format-badge">${book.format}</span>
                             ${bookmarkCount > 0 ? '<span class="format-badge" style="right:60px;">🔖'+bookmarkCount+'</span>' : ''}
                         </div>
                         <div class="book-info">
@@ -518,10 +518,9 @@
     }
 
     // ============================================================
-    // 9. ENGINES
+    // 9. ENGINES (FIX PDF)
     // ============================================================
 
-    // Base Engine
     class BaseEngine {
         constructor(file) {
             this.file = file;
@@ -538,7 +537,7 @@
         isLoaded() { return this.loaded; }
     }
 
-    // EPUB Engine
+    // --- EPUB ---
     class EPUBEngine extends BaseEngine {
         constructor(file) {
             super(file);
@@ -577,24 +576,38 @@
             }
         }
         getContentHTML() { return this.rawContent; }
-        getSpineItems() { return this.spineItems; }
         async getPage(pageNum) { return this.rawContent; }
     }
 
-    // PDF Engine
+    // --- PDF (FIXED) ---
     class PDFEngine extends BaseEngine {
         constructor(file) {
             super(file);
             this.pdfDoc = null;
-            this.scale = 1.5;
+            this.scale = 1.2;
+            this.renderedPages = {};
         }
+
         async load() {
             try {
+                if (typeof pdfjsLib === 'undefined') {
+                    throw new Error('pdfjsLib tidak ditemukan. Pastikan PDF.js dimuat.');
+                }
+
                 pdfjsLib.GlobalWorkerOptions.workerSrc = 
-                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js';
+
+                console.log('📄 Memuat PDF...');
                 const arrayBuffer = await this.file.arrayBuffer();
-                const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                const loadingTask = pdfjsLib.getDocument({ 
+                    data: arrayBuffer,
+                    useSystemFonts: true,
+                    disableFontFace: false
+                });
+                
                 this.pdfDoc = await loadingTask.promise;
+                console.log('✅ PDF dimuat, halaman:', this.pdfDoc.numPages);
+
                 const meta = await this.pdfDoc.getMetadata();
                 const info = meta.info || {};
                 this.metadata = {
@@ -606,32 +619,68 @@
                 this.toc = [];
                 this.loaded = true;
                 return this;
+
             } catch (error) {
+                console.error('❌ Gagal load PDF:', error);
                 throw new Error('Gagal memuat file PDF: ' + error.message);
             }
         }
+
         async getPage(pageNum) {
             if (!this.pdfDoc) throw new Error('PDF belum dimuat');
-            if (pageNum < 1 || pageNum > this.totalPages) throw new Error('Halaman tidak valid');
+            if (pageNum < 1 || pageNum > this.totalPages) {
+                throw new Error('Halaman tidak valid: ' + pageNum);
+            }
+
+            // Cache
+            if (this.renderedPages[pageNum]) {
+                return this.renderedPages[pageNum];
+            }
+
             try {
+                console.log(`🖼️ Render halaman ${pageNum}/${this.totalPages}...`);
                 const page = await this.pdfDoc.getPage(pageNum);
                 const viewport = page.getViewport({ scale: this.scale });
+                
                 const canvas = document.createElement('canvas');
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                const ctx = canvas.getContext('2d');
-                await page.render({ canvasContext: ctx, viewport }).promise;
-                return canvas.toDataURL('image/jpeg', 0.92);
+                const context = canvas.getContext('2d');
+                
+                const ratio = 1; // sederhana untuk performa
+                canvas.width = viewport.width * ratio;
+                canvas.height = viewport.height * ratio;
+                canvas.style.width = viewport.width + 'px';
+                canvas.style.height = viewport.height + 'px';
+                
+                context.scale(ratio, ratio);
+
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+
+                await page.render(renderContext).promise;
+                
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+                this.renderedPages[pageNum] = dataUrl;
+                
+                console.log(`✅ Halaman ${pageNum} selesai`);
+                return dataUrl;
+
             } catch (error) {
-                console.error('Gagal render halaman PDF:', pageNum, error);
-                return null;
+                console.error(`❌ Gagal render halaman ${pageNum}:`, error);
+                return `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
+                    <p>⚠️ Gagal render halaman ${pageNum}</p>
+                </div>`;
             }
         }
-        setScale(scale) { this.scale = Math.max(0.5, Math.min(3, scale)); }
+
+        setScale(scale) {
+            this.scale = Math.max(0.5, Math.min(2.5, scale));
+        }
         getScale() { return this.scale; }
     }
 
-    // TXT Engine
+    // --- TXT ---
     class TXTEngine extends BaseEngine {
         constructor(file) {
             super(file);
@@ -665,7 +714,7 @@
         async getPage(pageNum) { return this.getContentHTML(); }
     }
 
-    // Markdown Engine
+    // --- Markdown ---
     class MarkdownEngine extends BaseEngine {
         constructor(file) {
             super(file);
@@ -951,7 +1000,6 @@
     // 12. FEATURES
     // ============================================================
 
-    // --- Bookmark Feature ---
     class BookmarkFeature {
         constructor(options) {
             this.db = options.db;
@@ -1049,7 +1097,6 @@
         openPanel() { this.panel.classList.add('open'); document.getElementById('panelOverlay').classList.add('active'); this.load(); }
     }
 
-    // --- Highlight Feature ---
     class HighlightFeature {
         constructor(options) {
             this.db = options.db;
@@ -1192,7 +1239,6 @@
         openPanel() { this.panel.classList.add('open'); document.getElementById('panelOverlay').classList.add('active'); this.load(); }
     }
 
-    // --- Search Feature ---
     class SearchFeature {
         constructor(options) {
             this.panel = options.panel;
@@ -1269,7 +1315,6 @@
         openPanel() { this.panel.classList.add('open'); document.getElementById('panelOverlay').classList.add('active'); this.input.focus(); if (this.input.value) this.search(this.input.value); }
     }
 
-    // --- Settings Feature ---
     class SettingsFeature {
         constructor(options) {
             this.panel = options.panel;
@@ -1345,7 +1390,6 @@
         closePanel() { this.panel.classList.remove('open'); document.getElementById('panelOverlay').classList.remove('active'); }
     }
 
-    // --- TTS Feature ---
     class TTSFeature {
         constructor(options) {
             this.getCurrentPageText = options.getCurrentPageText || (() => '');
@@ -1391,14 +1435,14 @@
     }
 
     // ============================================================
-    // 13. READER CLASS
+    // 13. READER (FIX PDF PREPARATION)
     // ============================================================
 
     let readerInstance = null;
 
     class Reader {
         constructor(options) {
-            console.log('🔧 Reader constructor dipanggil');
+            console.log('🔧 Reader constructor');
             if (!options.container) throw new Error('container is required');
             if (!options.db) throw new Error('db is required');
 
@@ -1461,7 +1505,8 @@
             try {
                 this.container.classList.remove('reader-hidden');
                 this.container.classList.add('reader-visible');
-                this._requestFullscreen();
+                // Fullscreen dinonaktifkan sementara untuk debugging
+                // this._requestFullscreen();
 
                 this.engine = this._createEngine(bookData);
                 await this.engine.load();
@@ -1494,7 +1539,7 @@
                 this._startToolbarTimer();
 
             } catch (error) {
-                console.error('Gagal membuka buku:', error);
+                console.error('❌ Gagal membuka buku:', error);
                 this.showToast('Gagal membuka buku: ' + error.message, 'error');
                 this.close();
             }
@@ -1540,7 +1585,8 @@
             });
         }
 
-        // Private
+        // --- Private ---
+
         _createEngine(bookData) {
             const format = bookData.format.toLowerCase();
             switch (format) {
@@ -1584,14 +1630,43 @@
             await this.db.books.update(this.bookId, { totalPages: this.totalPages });
         }
 
+        // --- FIX PDF ---
         async _preparePDFPages() {
             const total = this.engine.getTotalPages();
             this.totalPages = total;
+            console.log(`📄 PDF memiliki ${total} halaman`);
+
             this.pages = new Array(total).fill(null);
-            for (let i = 0; i < Math.min(4, total); i++) {
-                this.pages[i] = await this.engine.getPage(i + 1);
+
+            // Render 2 halaman pertama
+            const maxRender = Math.min(4, total);
+            const renderPromises = [];
+            for (let i = 0; i < maxRender; i++) {
+                renderPromises.push(
+                    this.engine.getPage(i + 1)
+                        .then(dataUrl => {
+                            this.pages[i] = dataUrl;
+                            console.log(`✅ Halaman ${i+1} siap`);
+                        })
+                        .catch(err => {
+                            console.error(`❌ Gagal render halaman ${i+1}:`, err);
+                            this.pages[i] = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
+                                <p>⚠️ Gagal render halaman ${i+1}</p>
+                            </div>`;
+                        })
+                );
             }
+            await Promise.all(renderPromises);
+
+            // Placeholder untuk halaman lain
+            for (let i = maxRender; i < total; i++) {
+                this.pages[i] = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
+                    <p>⏳ Memuat halaman ${i+1}...</p>
+                </div>`;
+            }
+
             await this.db.books.update(this.bookId, { totalPages: total });
+            console.log('✅ Persiapan PDF selesai');
         }
 
         async _getSavedProgress() {
@@ -1792,7 +1867,7 @@
     }
 
     // ============================================================
-    // 14. OPEN READER FUNCTION
+    // 14. OPEN READER
     // ============================================================
 
     async function openReader(bookId) {
@@ -1924,7 +1999,7 @@
             getReaderSettings();
             await renderLibrary();
             await updateFooterStats();
-            console.log('📖 Papyrus Reader - Single File siap!');
+            console.log('📖 Papyrus Reader - v2 (FIX PDF) siap!');
         } catch (error) {
             console.error('Gagal inisialisasi:', error);
             showToast('Gagal memuat aplikasi', 'error');

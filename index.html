@@ -13,14 +13,15 @@
     <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- PDF.js v4 (lebih stabil) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.min.js"></script>
     
     <!-- Styles -->
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="app">
-        <!-- ===== HEADER ===== -->
+        <!-- HEADER -->
         <header id="appHeader">
             <div class="logo">
                 <span class="logo-icon">📖</span>
@@ -36,7 +37,7 @@
             </div>
         </header>
 
-        <!-- ===== LIBRARY ===== -->
+        <!-- LIBRARY -->
         <main id="library">
             <div class="dropzone" id="dropzone">
                 <div class="dropzone-content">
@@ -55,9 +56,8 @@
             </div>
         </main>
 
-        <!-- ===== READER CONTAINER ===== -->
+        <!-- READER -->
         <div id="reader-container" class="reader-hidden">
-            <!-- Toolbar -->
             <div class="reader-toolbar" id="readerToolbar">
                 <div class="toolbar-left">
                     <button class="toolbar-btn" id="readerBack" title="Kembali ke perpustakaan">←</button>
@@ -76,7 +76,6 @@
                 </div>
             </div>
 
-            <!-- Flipbook Area -->
             <div class="flipbook-wrapper" id="flipbookWrapper">
                 <div class="flipbook" id="flipbook">
                     <div class="page page-left" id="pageLeft"></div>
@@ -87,7 +86,6 @@
                 <div class="tap-zone tap-center" id="tapCenter"></div>
             </div>
 
-            <!-- Progress Bar -->
             <div class="reader-progress" id="readerProgress">
                 <div class="progress-track">
                     <div class="progress-fill" id="progressFill" style="width:0%"></div>
@@ -176,7 +174,7 @@
             <div class="panel-overlay" id="panelOverlay"></div>
         </div>
 
-        <!-- ===== FOOTER ===== -->
+        <!-- FOOTER -->
         <footer id="appFooter">
             <span class="footer-stats" id="footerStats">0 buku</span>
             <span class="footer-version">Papyrus v1.0</span>
