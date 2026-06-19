@@ -82,7 +82,6 @@
                     <div class="page page-left" id="pageLeft"></div>
                     <div class="page page-right" id="pageRight"></div>
                 </div>
-                <!-- Tap zones -->
                 <div class="tap-zone tap-left" id="tapLeft"></div>
                 <div class="tap-zone tap-right" id="tapRight"></div>
                 <div class="tap-zone tap-center" id="tapCenter"></div>
@@ -95,60 +94,31 @@
                 </div>
             </div>
 
-            <!-- ===== PANELS ===== -->
-
-            <!-- TOC Panel -->
+            <!-- Panels -->
             <div class="side-panel" id="tocPanel">
-                <div class="panel-header">
-                    <h3>📑 Daftar Isi</h3>
-                    <button class="panel-close" id="tocClose">✕</button>
-                </div>
+                <div class="panel-header"><h3>📑 Daftar Isi</h3><button class="panel-close" id="tocClose">✕</button></div>
                 <ul id="tocList"></ul>
             </div>
-
-            <!-- Bookmark Panel -->
             <div class="side-panel" id="bookmarkPanel">
-                <div class="panel-header">
-                    <h3>🔖 Bookmark</h3>
-                    <button class="panel-close" id="bookmarkClose">✕</button>
-                </div>
+                <div class="panel-header"><h3>🔖 Bookmark</h3><button class="panel-close" id="bookmarkClose">✕</button></div>
                 <ul id="bookmarkList"></ul>
-                <div class="panel-actions">
-                    <button class="btn-sm" id="bookmarkAdd">+ Tambah bookmark di halaman ini</button>
-                </div>
+                <div class="panel-actions"><button class="btn-sm" id="bookmarkAdd">+ Tambah bookmark di halaman ini</button></div>
             </div>
-
-            <!-- Highlight Panel -->
             <div class="side-panel" id="highlightPanel">
-                <div class="panel-header">
-                    <h3>🖍️ Highlight &amp; Catatan</h3>
-                    <button class="panel-close" id="highlightClose">✕</button>
-                </div>
+                <div class="panel-header"><h3>🖍️ Highlight &amp; Catatan</h3><button class="panel-close" id="highlightClose">✕</button></div>
                 <ul id="highlightList"></ul>
-                <div class="panel-actions">
-                    <p class="hint">Pilih teks di halaman, lalu klik highlight</p>
-                </div>
+                <div class="panel-actions"><p class="hint">Pilih teks di halaman, lalu klik highlight</p></div>
             </div>
-
-            <!-- Search Panel -->
             <div class="side-panel" id="searchPanel">
-                <div class="panel-header">
-                    <h3>🔍 Cari dalam buku</h3>
-                    <button class="panel-close" id="searchClose">✕</button>
-                </div>
+                <div class="panel-header"><h3>🔍 Cari dalam buku</h3><button class="panel-close" id="searchClose">✕</button></div>
                 <div class="search-input-group">
                     <input type="text" id="searchInput" placeholder="Kata kunci..." />
                     <button class="btn-sm" id="searchBtn">Cari</button>
                 </div>
                 <ul id="searchResults"></ul>
             </div>
-
-            <!-- Settings Panel -->
             <div class="side-panel" id="settingsPanel">
-                <div class="panel-header">
-                    <h3>⚙️ Pengaturan Tampilan</h3>
-                    <button class="panel-close" id="settingsClose">✕</button>
-                </div>
+                <div class="panel-header"><h3>⚙️ Pengaturan Tampilan</h3><button class="panel-close" id="settingsClose">✕</button></div>
                 <div class="settings-group">
                     <label>Ukuran Font</label>
                     <div class="settings-row">
@@ -203,7 +173,6 @@
                 </div>
             </div>
 
-            <!-- Panel Overlay -->
             <div class="panel-overlay" id="panelOverlay"></div>
         </div>
 
@@ -214,43 +183,9 @@
         </footer>
     </div>
 
-    <!-- Hidden file input -->
     <input type="file" id="fileInput" accept=".epub,.pdf,.txt,.md" multiple style="display:none">
 
-    <!-- ============================================================ -->
-    <!-- ===== SCRIPTS - URUTAN PENTING! ===== -->
-    <!-- ============================================================ -->
-
-    <!-- 1. UTILITY (helpers) -->
-    <script src="js/utils/helpers.js"></script>
-
-    <!-- 2. ENGINES (base dulu, lalu turunannya) -->
-    <script src="js/engines/base.js"></script>
-    <script src="js/engines/epub.js"></script>
-    <script src="js/engines/pdf.js"></script>
-    <script src="js/engines/txt.js"></script>
-    <script src="js/engines/markdown.js"></script>
-
-    <!-- 3. CORE (paginator & flipbook) -->
-    <script src="js/paginator.js"></script>
-    <script src="js/flipbook.js"></script>
-
-    <!-- 4. FEATURES (bookmark, highlight, search, settings, tts) -->
-    <script src="js/features/bookmark.js"></script>
-    <script src="js/features/highlight.js"></script>
-    <script src="js/features/search.js"></script>
-    <script src="js/features/settings.js"></script>
-    <script src="js/features/tts.js"></script>
-
-    <!-- 5. READER (harus SEBELUM app.js) -->
-    <script src="js/reader.js"></script>
-
-    <!-- 6. MAIN APP (harus PALING BAWAH) -->
+    <!-- ===== SINGLE APP SCRIPT ===== -->
     <script src="app.js"></script>
-
-    <!-- ============================================================ -->
-    <!-- AKHIR SCRIPTS -->
-    <!-- ============================================================ -->
-
 </body>
 </html>
