@@ -38,7 +38,6 @@
 
         <!-- ===== LIBRARY ===== -->
         <main id="library">
-            <!-- Drop Zone -->
             <div class="dropzone" id="dropzone">
                 <div class="dropzone-content">
                     <div class="dropzone-icon">📚</div>
@@ -47,11 +46,7 @@
                     <span class="dropzone-hint">atau klik tombol + di atas</span>
                 </div>
             </div>
-
-            <!-- Books Grid -->
             <div class="books-grid" id="booksGrid"></div>
-
-            <!-- Empty State -->
             <div class="empty-state" id="emptyState">
                 <div class="empty-icon">📕</div>
                 <h3>Belum Ada Buku</h3>
@@ -67,12 +62,15 @@
                 <div class="toolbar-left">
                     <button class="toolbar-btn" id="readerBack" title="Kembali ke perpustakaan">←</button>
                     <button class="toolbar-btn" id="readerToc" title="Daftar Isi">☰</button>
-                    <button class="toolbar-btn" id="readerBookmark" title="Tandai halaman">🔖</button>
+                    <button class="toolbar-btn" id="readerBookmark" title="Bookmark">🔖</button>
+                    <button class="toolbar-btn" id="readerHighlight" title="Highlight">🖍️</button>
                 </div>
                 <div class="toolbar-center" id="readerPageInfo">
                     <span id="pageIndicator">Hal 1 / 1</span>
                 </div>
                 <div class="toolbar-right">
+                    <button class="toolbar-btn" id="readerSearch" title="Cari">🔍</button>
+                    <button class="toolbar-btn" id="readerTts" title="Bacakan">🔊</button>
                     <button class="toolbar-btn" id="readerSettings" title="Pengaturan">⚙️</button>
                     <button class="toolbar-btn" id="readerFullscreen" title="Layar penuh">⛶</button>
                 </div>
@@ -97,14 +95,115 @@
                 </div>
             </div>
 
-            <!-- TOC Panel (slide-in) -->
+            <!-- ===== PANELS ===== -->
+
+            <!-- TOC Panel -->
             <div class="side-panel" id="tocPanel">
                 <div class="panel-header">
-                    <h3>Daftar Isi</h3>
+                    <h3>📑 Daftar Isi</h3>
                     <button class="panel-close" id="tocClose">✕</button>
                 </div>
                 <ul id="tocList"></ul>
             </div>
+
+            <!-- Bookmark Panel -->
+            <div class="side-panel" id="bookmarkPanel">
+                <div class="panel-header">
+                    <h3>🔖 Bookmark</h3>
+                    <button class="panel-close" id="bookmarkClose">✕</button>
+                </div>
+                <ul id="bookmarkList"></ul>
+                <div class="panel-actions">
+                    <button class="btn-sm" id="bookmarkAdd">+ Tambah bookmark di halaman ini</button>
+                </div>
+            </div>
+
+            <!-- Highlight Panel -->
+            <div class="side-panel" id="highlightPanel">
+                <div class="panel-header">
+                    <h3>🖍️ Highlight &amp; Catatan</h3>
+                    <button class="panel-close" id="highlightClose">✕</button>
+                </div>
+                <ul id="highlightList"></ul>
+                <div class="panel-actions">
+                    <p class="hint">Pilih teks di halaman, lalu klik highlight</p>
+                </div>
+            </div>
+
+            <!-- Search Panel -->
+            <div class="side-panel" id="searchPanel">
+                <div class="panel-header">
+                    <h3>🔍 Cari dalam buku</h3>
+                    <button class="panel-close" id="searchClose">✕</button>
+                </div>
+                <div class="search-input-group">
+                    <input type="text" id="searchInput" placeholder="Kata kunci..." />
+                    <button class="btn-sm" id="searchBtn">Cari</button>
+                </div>
+                <ul id="searchResults"></ul>
+            </div>
+
+            <!-- Settings Panel -->
+            <div class="side-panel" id="settingsPanel">
+                <div class="panel-header">
+                    <h3>⚙️ Pengaturan Tampilan</h3>
+                    <button class="panel-close" id="settingsClose">✕</button>
+                </div>
+                <div class="settings-group">
+                    <label>Ukuran Font</label>
+                    <div class="settings-row">
+                        <button class="btn-sm" id="fontDec">A-</button>
+                        <span id="fontSizeDisplay">16</span>
+                        <button class="btn-sm" id="fontInc">A+</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label>Jenis Font</label>
+                    <select id="fontFamilySelect">
+                        <option value="Georgia, serif">Serif (Georgia)</option>
+                        <option value="Times New Roman, serif">Serif (Times)</option>
+                        <option value="Arial, sans-serif">Sans-serif (Arial)</option>
+                        <option value="Helvetica, sans-serif">Sans-serif (Helvetica)</option>
+                        <option value="'OpenDyslexic', sans-serif">OpenDyslexic</option>
+                    </select>
+                </div>
+                <div class="settings-group">
+                    <label>Line Height</label>
+                    <div class="settings-row">
+                        <button class="btn-sm" id="lhDec">−</button>
+                        <span id="lhDisplay">1.7</span>
+                        <button class="btn-sm" id="lhInc">+</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label>Margin</label>
+                    <div class="settings-row">
+                        <button class="btn-sm" id="marginDec">−</button>
+                        <span id="marginDisplay">36</span>
+                        <button class="btn-sm" id="marginInc">+</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label>Alignment</label>
+                    <div class="settings-row">
+                        <button class="btn-sm align-btn" data-align="left">Kiri</button>
+                        <button class="btn-sm align-btn" data-align="justify">Rata</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <label>Tema</label>
+                    <div class="settings-row">
+                        <button class="btn-sm theme-btn" data-theme="light">☀️ Terang</button>
+                        <button class="btn-sm theme-btn" data-theme="sepia">🟫 Sepia</button>
+                        <button class="btn-sm theme-btn" data-theme="dark">🌙 Gelap</button>
+                    </div>
+                </div>
+                <div class="settings-group">
+                    <button class="btn-sm" id="resetSettings">↺ Reset ke default</button>
+                </div>
+            </div>
+
+            <!-- Panel Overlay -->
             <div class="panel-overlay" id="panelOverlay"></div>
         </div>
 
@@ -132,6 +231,15 @@
     <!-- Core -->
     <script src="js/paginator.js"></script>
     <script src="js/flipbook.js"></script>
+    
+    <!-- Features -->
+    <script src="js/features/bookmark.js"></script>
+    <script src="js/features/highlight.js"></script>
+    <script src="js/features/search.js"></script>
+    <script src="js/features/settings.js"></script>
+    <script src="js/features/tts.js"></script>
+    
+    <!-- Reader -->
     <script src="js/reader.js"></script>
     
     <!-- Main App -->

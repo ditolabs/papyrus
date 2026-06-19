@@ -1,20 +1,22 @@
 /* ========================================
    Papyrus Reader - Main Application
-   Fase 2: Foundation + Reader Integration
+   Fase 3: + Bookmark, Highlight, Search, Settings, TTS
    ======================================== */
 
 (function() {
     'use strict';
 
     // ========================================
-    // 1. DATABASE LAYER (Dexie.js)
+    // 1. DATABASE LAYER (Dexie.js) - UPDATED
     // ========================================
 
     const db = new Dexie('PapyrusReader');
 
-    db.version(1).stores({
+    db.version(2).stores({
         books: '++id, title, author, format, fileName, fileSize, addedAt, lastRead, totalPages',
         progress: '++id, bookId, page, percentage, lastReadAt',
+        bookmarks: '++id, bookId, page, note, createdAt',
+        highlights: '++id, bookId, page, text, note, createdAt, color',
         settings: 'key'
     });
 
@@ -25,7 +27,14 @@
     const state = {
         books: [],
         currentTheme: 'light',
-        toastTimer: null
+        toastTimer: null,
+        readerSettings: {
+            fontSize: 16,
+            fontFamily: 'Georgia, serif',
+            lineHeight: 1.7,
+            margin: 36,
+            alignment: 'justify'
+        }
     };
 
     // ========================================
@@ -55,11 +64,7 @@
     // ========================================
 
     const THEMES = ['light', 'dark', 'sepia'];
-    const THEME_ICONS = {
-        light: '🌙',
-        dark: '☀️',
-        sepia: '🌓'
-    };
+    const THEME_ICONS = { light: '🌙', dark: '☀️', sepia: '🌓' };
 
     function getNextTheme(current) {
         const idx = THEMES.indexOf(current);
@@ -71,6 +76,10 @@
         state.currentTheme = theme;
         dom.themeIcon.textContent = THEME_ICONS[theme];
         localStorage.setItem('papyrus-theme', theme);
+        // Update theme buttons di settings
+        document.querySelectorAll('.theme-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.theme === theme);
+        });
     }
 
     function loadTheme() {
@@ -162,6 +171,8 @@
         try {
             await db.books.delete(id);
             await db.progress.where('bookId').equals(id).delete();
+            await db.bookmarks.where('bookId').equals(id).delete();
+            await db.highlights.where('bookId').equals(id).delete();
         } catch (error) {
             console.error('Gagal hapus buku:', error);
             throw error;
@@ -207,7 +218,117 @@
     }
 
     // ========================================
-    // 7. FILE UPLOAD & PARSING
+    // 7. BOOKMARK STORAGE
+    // ========================================
+
+    async function getBookmarks(bookId) {
+        try {
+            return await db.bookmarks.where('bookId').equals(bookId).toArray();
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async function addBookmark(bookId, page, note = '') {
+        try {
+            const id = await db.bookmarks.add({
+                bookId,
+                page,
+                note: note || `Halaman ${page}`,
+                createdAt: Date.now()
+            });
+            return id;
+        } catch (e) {
+            console.error('Gagal add bookmark:', e);
+            return null;
+        }
+    }
+
+    async function removeBookmark(id) {
+        try {
+            await db.bookmarks.delete(id);
+            return true;
+        } catch (e) {
+            console.error('Gagal remove bookmark:', e);
+            return false;
+        }
+    }
+
+    // ========================================
+    // 8. HIGHLIGHT STORAGE
+    // ========================================
+
+    async function getHighlights(bookId) {
+        try {
+            return await db.highlights.where('bookId').equals(bookId).toArray();
+        } catch (e) {
+            return [];
+        }
+    }
+
+    async function addHighlight(bookId, page, text, note = '', color = '#f9e66b') {
+        try {
+            const id = await db.highlights.add({
+                bookId,
+                page,
+                text: text.substring(0, 500),
+                note,
+                color,
+                createdAt: Date.now()
+            });
+            return id;
+        } catch (e) {
+            console.error('Gagal add highlight:', e);
+            return null;
+        }
+    }
+
+    async function removeHighlight(id) {
+        try {
+            await db.highlights.delete(id);
+            return true;
+        } catch (e) {
+            console.error('Gagal remove highlight:', e);
+            return false;
+        }
+    }
+
+    async function updateHighlight(id, updates) {
+        try {
+            await db.highlights.update(id, updates);
+            return true;
+        } catch (e) {
+            console.error('Gagal update highlight:', e);
+            return false;
+        }
+    }
+
+    // ========================================
+    // 9. SETTINGS STORAGE
+    // ========================================
+
+    function getReaderSettings() {
+        try {
+            const saved = localStorage.getItem('papyrus-reader-settings');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                state.readerSettings = { ...state.readerSettings, ...parsed };
+            }
+        } catch (e) {}
+        return state.readerSettings;
+    }
+
+    function saveReaderSettings(settings) {
+        state.readerSettings = { ...state.readerSettings, ...settings };
+        localStorage.setItem('papyrus-reader-settings', JSON.stringify(state.readerSettings));
+        // Update reader jika sedang terbuka
+        if (readerInstance) {
+            readerInstance.applySettings(state.readerSettings);
+        }
+    }
+
+    // ========================================
+    // 10. FILE UPLOAD & PARSING
     // ========================================
 
     const SUPPORTED_FORMATS = {
@@ -241,11 +362,9 @@
     async function parseBookMetadata(file) {
         const format = getFormatLabel(file.name);
         let title = file.name.replace(/\.[^.]+$/, '');
-        let author = '';
-
         return {
             title: title || 'Tanpa Judul',
-            author: author || 'Tanpa Penulis',
+            author: 'Tanpa Penulis',
             format: format || 'Unknown',
             fileName: file.name,
             fileSize: file.size,
@@ -281,7 +400,7 @@
                 lastRead: null
             };
 
-            const id = await saveBook(bookData);
+            await saveBook(bookData);
             showToast(`✅ "${meta.title}" berhasil ditambahkan`, 'success');
             await renderLibrary();
             await updateFooterStats();
@@ -295,7 +414,7 @@
     }
 
     // ========================================
-    // 8. RENDER LIBRARY
+    // 11. RENDER LIBRARY
     // ========================================
 
     async function renderLibrary() {
@@ -322,12 +441,7 @@
                 const page = progress?.page || 0;
                 const totalPages = book.totalPages || 0;
 
-                const formatIcons = {
-                    'EPUB': '📘',
-                    'PDF': '📕',
-                    'TXT': '📄',
-                    'Markdown': '📝'
-                };
+                const formatIcons = { 'EPUB': '📘', 'PDF': '📕', 'TXT': '📄', 'Markdown': '📝' };
                 const icon = formatIcons[book.format] || '📖';
 
                 let lastReadText = 'Belum dibaca';
@@ -341,11 +455,16 @@
                     else lastReadText = date.toLocaleDateString('id-ID');
                 }
 
+                // Hitung bookmark & highlight count
+                const bookmarkCount = await db.bookmarks.where('bookId').equals(book.id).count();
+                const highlightCount = await db.highlights.where('bookId').equals(book.id).count();
+
                 html += `
                     <div class="book-card" data-id="${book.id}">
                         <div class="book-cover">
                             <span>${icon}</span>
                             <span class="format-badge">${book.format}</span>
+                            ${bookmarkCount > 0 ? '<span class="format-badge" style="right:60px;">🔖'+bookmarkCount+'</span>' : ''}
                         </div>
                         <div class="book-info">
                             <div class="book-title" title="${book.title}">${book.title}</div>
@@ -406,7 +525,7 @@
     }
 
     // ========================================
-    // 9. READER - FASE 2 INTEGRATION
+    // 12. READER - FASE 3 INTEGRATION
     // ========================================
 
     let readerInstance = null;
@@ -430,6 +549,14 @@
             progressFill: document.getElementById('progressFill'),
             tocList: document.getElementById('tocList'),
             tocPanel: document.getElementById('tocPanel'),
+            bookmarkPanel: document.getElementById('bookmarkPanel'),
+            bookmarkList: document.getElementById('bookmarkList'),
+            highlightPanel: document.getElementById('highlightPanel'),
+            highlightList: document.getElementById('highlightList'),
+            searchPanel: document.getElementById('searchPanel'),
+            searchInput: document.getElementById('searchInput'),
+            searchResults: document.getElementById('searchResults'),
+            settingsPanel: document.getElementById('settingsPanel'),
             panelOverlay: document.getElementById('panelOverlay'),
             onClose: () => {
                 readerInstance = null;
@@ -438,7 +565,18 @@
             },
             onProgress: async () => {
                 renderLibrary();
-            }
+            },
+            db: db,
+            getBookmarks: getBookmarks,
+            addBookmark: addBookmark,
+            removeBookmark: removeBookmark,
+            getHighlights: getHighlights,
+            addHighlight: addHighlight,
+            removeHighlight: removeHighlight,
+            updateHighlight: updateHighlight,
+            getReaderSettings: getReaderSettings,
+            saveReaderSettings: saveReaderSettings,
+            showToast: showToast
         });
 
         try {
@@ -451,7 +589,7 @@
     }
 
     // ========================================
-    // 10. FOOTER STATS
+    // 13. FOOTER STATS
     // ========================================
 
     async function updateFooterStats() {
@@ -462,7 +600,7 @@
     }
 
     // ========================================
-    // 11. EVENT BINDING
+    // 14. EVENT BINDING
     // ========================================
 
     dom.themeToggle.addEventListener('click', toggleTheme);
@@ -520,15 +658,16 @@
     });
 
     // ========================================
-    // 12. INITIALIZATION
+    // 15. INITIALIZATION
     // ========================================
 
     async function init() {
         try {
             loadTheme();
+            getReaderSettings(); // Load settings
             await renderLibrary();
             await updateFooterStats();
-            console.log('📖 Papyrus Reader - Fase 2 siap!');
+            console.log('📖 Papyrus Reader - Fase 3 siap!');
             console.log(`📚 ${state.books.length} buku di perpustakaan`);
         } catch (error) {
             console.error('Gagal inisialisasi:', error);
@@ -548,11 +687,22 @@
         deleteBook,
         saveProgress,
         getProgress,
+        getBookmarks,
+        addBookmark,
+        removeBookmark,
+        getHighlights,
+        addHighlight,
+        removeHighlight,
+        updateHighlight,
+        getReaderSettings,
+        saveReaderSettings,
         renderLibrary,
         handleFileUpload,
         showToast,
         openReader,
-        updateFooterStats
+        updateFooterStats,
+        toggleTheme,
+        applyTheme
     };
 
 })();

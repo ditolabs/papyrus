@@ -1,20 +1,45 @@
 /* ========================================
    Reader - Main Reader Controller
+   Fase 3: + Bookmark, Highlight, Search, Settings, TTS
    ======================================== */
 
 class Reader {
     constructor(options) {
+        // DOM refs
         this.container = options.container;
         this.toolbar = options.toolbar;
         this.pageIndicator = options.pageIndicator;
         this.progressFill = options.progressFill;
         this.tocList = options.tocList;
         this.tocPanel = options.tocPanel;
+        this.bookmarkPanel = options.bookmarkPanel;
+        this.bookmarkList = options.bookmarkList;
+        this.highlightPanel = options.highlightPanel;
+        this.highlightList = options.highlightList;
+        this.searchPanel = options.searchPanel;
+        this.searchInput = options.searchInput;
+        this.searchResults = options.searchResults;
+        this.settingsPanel = options.settingsPanel;
         this.panelOverlay = options.panelOverlay;
 
+        // Callbacks
         this.onClose = options.onClose || (() => {});
         this.onProgress = options.onProgress || (() => {});
 
+        // DB & Helpers
+        this.db = options.db;
+        this.getBookmarks = options.getBookmarks || (() => []);
+        this.addBookmark = options.addBookmark || (() => {});
+        this.removeBookmark = options.removeBookmark || (() => {});
+        this.getHighlights = options.getHighlights || (() => []);
+        this.addHighlight = options.addHighlight || (() => {});
+        this.removeHighlight = options.removeHighlight || (() => {});
+        this.updateHighlight = options.updateHighlight || (() => {});
+        this.getReaderSettings = options.getReaderSettings || (() => ({}));
+        this.saveReaderSettings = options.saveReaderSettings || (() => {});
+        this.showToast = options.showToast || (() => {});
+
+        // State
         this.book = null;
         this.engine = null;
         this.pages = [];
@@ -23,7 +48,16 @@ class Reader {
         this.totalPages = 0;
         this.bookId = null;
         this.isOpen = false;
+        this.settings = this.getReaderSettings();
 
+        // Features
+        this.bookmarkFeature = null;
+        this.highlightFeature = null;
+        this.searchFeature = null;
+        this.settingsFeature = null;
+        this.ttsFeature = null;
+
+        // Bind events
         this._bindEvents();
     }
 
@@ -38,6 +72,7 @@ class Reader {
 
             this._requestFullscreen();
 
+            // Init engine
             this.engine = this._createEngine(bookData);
             await this.engine.load();
 
@@ -52,6 +87,7 @@ class Reader {
 
             const savedPage = await this._getSavedProgress();
 
+            // Init flipbook
             this.flipbook = new Flipbook({
                 container: document.getElementById('flipbook'),
                 pageLeft: document.getElementById('pageLeft'),
@@ -62,6 +98,13 @@ class Reader {
 
             this.flipbook.setPages(this.pages, savedPage);
 
+            // Init features
+            this._initFeatures();
+
+            // Apply settings
+            this.applySettings(this.settings);
+
+            // Update UI
             this._updateUI();
             this.toolbar.classList.add('visible');
 
@@ -70,12 +113,17 @@ class Reader {
 
         } catch (error) {
             console.error('Gagal membuka buku:', error);
-            this._showError('Gagal membuka buku: ' + error.message);
+            this.showToast('Gagal membuka buku: ' + error.message, 'error');
             this.close();
         }
     }
 
     close() {
+        // Stop TTS jika berjalan
+        if (this.ttsFeature && this.ttsFeature.isPlaying) {
+            this.ttsFeature.stop();
+        }
+
         if (this.flipbook) {
             this.flipbook.destroy();
             this.flipbook = null;
@@ -125,22 +173,32 @@ class Reader {
         }
     }
 
+    applySettings(settings) {
+        this.settings = settings;
+        const pages = document.querySelectorAll('.page');
+        pages.forEach(el => {
+            el.style.fontSize = (settings.fontSize || 16) + 'px';
+            el.style.fontFamily = settings.fontFamily || 'Georgia, serif';
+            el.style.lineHeight = settings.lineHeight || 1.7;
+            el.style.padding = (settings.margin || 36) + 'px';
+            el.style.textAlign = settings.alignment || 'justify';
+        });
+
+        // Re-paginate jika perlu? Untuk sederhana, kita update style saja.
+        // Untuk paginasi ulang butuh rebuild yang kompleks.
+    }
+
     // ==================== Private Methods ====================
 
     _createEngine(bookData) {
         const format = bookData.format.toLowerCase();
         switch (format) {
-            case 'epub':
-                return new EPUBEngine(bookData.file);
-            case 'pdf':
-                return new PDFEngine(bookData.file);
-            case 'txt':
-                return new TXTEngine(bookData.file);
+            case 'epub': return new EPUBEngine(bookData.file);
+            case 'pdf': return new PDFEngine(bookData.file);
+            case 'txt': return new TXTEngine(bookData.file);
             case 'markdown':
-            case 'md':
-                return new MarkdownEngine(bookData.file);
-            default:
-                throw new Error('Format tidak didukung: ' + format);
+            case 'md': return new MarkdownEngine(bookData.file);
+            default: throw new Error('Format tidak didukung: ' + format);
         }
     }
 
@@ -165,18 +223,19 @@ class Reader {
         const width = rect.width * 0.48;
         const height = rect.height * 0.85;
 
+        const s = this.settings;
         const paginator = new Paginator(content, width, height, {
-            fontFamily: getComputedStyle(document.documentElement).getPropertyValue('--font-reader') || 'Georgia, serif',
-            fontSize: '16px',
-            lineHeight: 1.7,
-            padding: 36,
+            fontFamily: s.fontFamily || 'Georgia, serif',
+            fontSize: s.fontSize + 'px' || '16px',
+            lineHeight: s.lineHeight || 1.7,
+            padding: s.margin || 36,
             maxPages: 3000
         });
 
         this.pages = await paginator.paginate();
         this.totalPages = this.pages.length;
 
-        await db.books.update(this.bookId, { totalPages: this.totalPages });
+        await this.db.books.update(this.bookId, { totalPages: this.totalPages });
     }
 
     async _preparePDFPages() {
@@ -189,19 +248,129 @@ class Reader {
             this.pages[i] = await this.engine.getPage(i + 1);
         }
 
-        await db.books.update(this.bookId, { totalPages: total });
+        await this.db.books.update(this.bookId, { totalPages: total });
     }
 
     async _getSavedProgress() {
         try {
-            const progress = await db.progress.where('bookId').equals(this.bookId).first();
+            const progress = await this.db.progress.where('bookId').equals(this.bookId).first();
             if (progress && progress.page) {
                 return Math.min(progress.page - 1, this.totalPages - 1);
             }
-        } catch (e) {
-            console.warn('Gagal load progress:', e);
-        }
+        } catch (e) {}
         return 0;
+    }
+
+    _initFeatures() {
+        const self = this;
+
+        // Bookmark
+        this.bookmarkFeature = new BookmarkFeature({
+            db: this.db,
+            bookId: this.bookId,
+            panel: this.bookmarkPanel,
+            listEl: this.bookmarkList,
+            getCurrentPage: () => this.currentPage,
+            goToPage: (page) => this.goToPage(page),
+            showToast: this.showToast,
+            onChange: () => {}
+        });
+        this.bookmarkFeature.load();
+
+        // Highlight
+        this.highlightFeature = new HighlightFeature({
+            db: this.db,
+            bookId: this.bookId,
+            panel: this.highlightPanel,
+            listEl: this.highlightList,
+            getCurrentPage: () => this.currentPage,
+            goToPage: (page) => this.goToPage(page),
+            getPageContent: () => {
+                const info = this.flipbook ? this.flipbook.getCurrentInfo() : { leftIndex: 0 };
+                return this.pages[info.leftIndex] || '';
+            },
+            showToast: this.showToast,
+            onChange: () => {}
+        });
+        this.highlightFeature.load();
+
+        // Search
+        this.searchFeature = new SearchFeature({
+            panel: this.searchPanel,
+            input: this.searchInput,
+            resultsEl: this.searchResults,
+            getAllPages: () => this.pages,
+            goToPage: (page) => this.goToPage(page),
+            showToast: this.showToast
+        });
+
+        // Settings
+        this.settingsFeature = new SettingsFeature({
+            panel: this.settingsPanel,
+            getSettings: () => this.settings,
+            saveSettings: (settings) => {
+                this.settings = settings;
+                this.saveReaderSettings(settings);
+                this.applySettings(settings);
+            },
+            applySettings: (settings) => this.applySettings(settings),
+            showToast: this.showToast,
+            themeToggle: (theme) => {
+                // Panggil fungsi theme dari app.js
+                if (window.__Papyrus && window.__Papyrus.applyTheme) {
+                    window.__Papyrus.applyTheme(theme);
+                }
+            }
+        });
+
+        // TTS
+        this.ttsFeature = new TTSFeature({
+            getCurrentPageText: () => {
+                const info = this.flipbook ? this.flipbook.getCurrentInfo() : { leftIndex: 0 };
+                const html = this.pages[info.leftIndex] || '';
+                const temp = document.createElement('div');
+                temp.innerHTML = html;
+                return temp.textContent || '';
+            },
+            showToast: this.showToast,
+            getSettings: () => this.settings
+        });
+
+        // Bind panel toggles dari toolbar
+        document.getElementById('readerToc').addEventListener('click', () => {
+            this._togglePanel(this.tocPanel);
+            this._renderTOC();
+        });
+
+        document.getElementById('readerBookmark').addEventListener('click', () => {
+            if (this.bookmarkFeature) {
+                this.bookmarkFeature.openPanel();
+            }
+        });
+
+        document.getElementById('readerHighlight').addEventListener('click', () => {
+            if (this.highlightFeature) {
+                this.highlightFeature.openPanel();
+            }
+        });
+
+        document.getElementById('readerSearch').addEventListener('click', () => {
+            if (this.searchFeature) {
+                this.searchFeature.openPanel();
+            }
+        });
+
+        document.getElementById('readerSettings').addEventListener('click', () => {
+            if (this.settingsFeature) {
+                this.settingsFeature.openPanel();
+            }
+        });
+
+        document.getElementById('readerTts').addEventListener('click', () => {
+            if (this.ttsFeature) {
+                this.ttsFeature.speak();
+            }
+        });
     }
 
     _onPageChange(leftIdx, rightIdx) {
@@ -210,6 +379,13 @@ class Reader {
 
         this._updateUI();
         this._saveProgress();
+
+        // Update highlight di halaman
+        if (this.highlightFeature) {
+            setTimeout(() => {
+                this.highlightFeature.applyToPage();
+            }, 100);
+        }
     }
 
     _updateUI() {
@@ -244,7 +420,14 @@ class Reader {
     async _saveProgress() {
         if (!this.bookId || !this.totalPages) return;
         try {
-            await saveProgress(this.bookId, this.currentPage, this.totalPages);
+            await this.db.progress.where('bookId').equals(this.bookId).delete();
+            await this.db.progress.add({
+                bookId: this.bookId,
+                page: this.currentPage,
+                percentage: Math.round((this.currentPage / this.totalPages) * 100),
+                lastReadAt: Date.now()
+            });
+            await this.db.books.update(this.bookId, { lastRead: Date.now() });
             this.onProgress(this.bookId, this.currentPage, this.totalPages);
         } catch (e) {
             console.warn('Gagal save progress:', e);
@@ -269,6 +452,24 @@ class Reader {
         }, 3000);
     }
 
+    _togglePanel(panel) {
+        const isOpen = panel.classList.contains('open');
+        this._closeAllPanels();
+        if (!isOpen) {
+            panel.classList.add('open');
+            this.panelOverlay.classList.add('active');
+        }
+    }
+
+    _closePanel() {
+        this._closeAllPanels();
+    }
+
+    _closeAllPanels() {
+        document.querySelectorAll('.side-panel').forEach(p => p.classList.remove('open'));
+        this.panelOverlay.classList.remove('active');
+    }
+
     _bindEvents() {
         document.addEventListener('keydown', (e) => {
             if (!this.isOpen) return;
@@ -283,6 +484,11 @@ class Reader {
                 this.toggleFullscreen();
             } else if (e.key === 'Escape') {
                 this.close();
+            } else if (e.ctrlKey && e.key === 'f') {
+                e.preventDefault();
+                if (this.searchFeature) {
+                    this.searchFeature.openPanel();
+                }
             }
         });
 
@@ -292,37 +498,21 @@ class Reader {
 
         document.getElementById('readerBack').addEventListener('click', () => this.close());
         document.getElementById('readerFullscreen').addEventListener('click', () => this.toggleFullscreen());
-        document.getElementById('readerToc').addEventListener('click', () => this._togglePanel());
-        document.getElementById('tocClose').addEventListener('click', () => this._closePanel());
-        document.getElementById('panelOverlay').addEventListener('click', () => this._closePanel());
 
-        document.getElementById('readerBookmark').addEventListener('click', () => {
-            const info = this.flipbook ? this.flipbook.getCurrentInfo() : { leftPage: 1 };
-            alert(`🔖 Halaman ${info.leftPage} ditandai! (Fitur bookmark akan hadir di Fase 3)`);
-        });
-
-        document.getElementById('readerSettings').addEventListener('click', () => {
-            alert('⚙️ Pengaturan font & tema akan hadir di Fase 3');
-        });
+        // Panel overlay close
+        this.panelOverlay.addEventListener('click', () => this._closeAllPanels());
 
         window.addEventListener('resize', () => {
             if (this.flipbook) {
                 this.flipbook.updateLayout();
             }
         });
-    }
 
-    _togglePanel() {
-        this.tocPanel.classList.toggle('open');
-        this.panelOverlay.classList.toggle('active');
-    }
-
-    _closePanel() {
-        this.tocPanel.classList.remove('open');
-        this.panelOverlay.classList.remove('active');
-    }
-
-    _showError(message) {
-        alert('❌ ' + message);
+        // Mouse wheel horizontal scroll prevention
+        document.getElementById('flipbookWrapper').addEventListener('wheel', (e) => {
+            if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+                e.preventDefault();
+            }
+        }, { passive: false });
     }
 }
