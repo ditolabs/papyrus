@@ -10,87 +10,62 @@
     <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
     <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
     
-    <!-- Libraries - untuk EPUB butuh JSZip -->
+    <!-- Libraries -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
     
-    <!-- PDF.js - multiple CDN fallback -->
+    <!-- PDF.js 3.x stabil -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
-        // Load PDF.js dengan fallback
-        function loadPDFJS() {
-            return new Promise(function(resolve, reject) {
+        // Set worker setelah library dimuat
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        console.log('✅ PDF.js worker set ke 3.11.174');
+        
+        // Fungsi tunggu
+        function waitForPDFJS() {
+            return new Promise(function(resolve) {
                 if (typeof pdfjsLib !== 'undefined') {
-                    console.log('✅ PDF.js sudah ada');
                     resolve();
                     return;
                 }
-
-                var sources = [
-                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.min.js',
-                    'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.min.js',
-                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'
-                ];
-
-                var index = 0;
-
-                function tryLoad() {
-                    if (index >= sources.length) {
-                        reject(new Error('Semua sumber PDF.js gagal dimuat'));
-                        return;
-                    }
-
-                    var script = document.createElement('script');
-                    script.src = sources[index];
-                    script.onload = function() {
-                        if (typeof pdfjsLib !== 'undefined') {
-                            console.log('✅ PDF.js dimuat dari:', sources[index]);
-                            resolve();
-                        } else {
-                            index++;
-                            tryLoad();
-                        }
-                    };
-                    script.onerror = function() {
-                        console.warn('❌ Gagal load:', sources[index]);
-                        index++;
-                        tryLoad();
-                    };
-                    document.head.appendChild(script);
-                }
-
-                tryLoad();
-            });
-        }
-
-        // Load JSZip juga (untuk epub.js)
-        function loadJSZip() {
-            return new Promise(function(resolve, reject) {
-                if (typeof JSZip !== 'undefined') {
-                    console.log('✅ JSZip sudah ada');
-                    resolve();
-                    return;
-                }
-                var script = document.createElement('script');
-                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-                script.onload = function() {
-                    if (typeof JSZip !== 'undefined') {
-                        console.log('✅ JSZip dimuat');
+                var attempts = 0;
+                var interval = setInterval(function() {
+                    attempts++;
+                    if (typeof pdfjsLib !== 'undefined') {
+                        clearInterval(interval);
                         resolve();
-                    } else {
-                        reject(new Error('JSZip gagal dimuat'));
+                    } else if (attempts > 30) {
+                        clearInterval(interval);
+                        console.warn('⚠️ PDF.js tidak ditemukan');
+                        resolve();
                     }
-                };
-                script.onerror = function() {
-                    reject(new Error('JSZip gagal dimuat'));
-                };
-                document.head.appendChild(script);
+                }, 200);
             });
         }
-
-        // Gabungkan loading
-        window.PDFJS_LOADED = loadPDFJS();
-        window.JSZIP_LOADED = loadJSZip();
+        window.PDFJS_LOADED = waitForPDFJS();
+        
+        function waitForJSZip() {
+            return new Promise(function(resolve) {
+                if (typeof JSZip !== 'undefined') {
+                    resolve();
+                    return;
+                }
+                var attempts = 0;
+                var interval = setInterval(function() {
+                    attempts++;
+                    if (typeof JSZip !== 'undefined') {
+                        clearInterval(interval);
+                        resolve();
+                    } else if (attempts > 30) {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                }, 200);
+            });
+        }
+        window.JSZIP_LOADED = waitForJSZip();
     </script>
     
     <!-- Styles -->

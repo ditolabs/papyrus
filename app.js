@@ -1,6 +1,6 @@
 /* ========================================
-   Papyrus Reader - Single File App v4
-   FIX: JSZip + PDF Worker
+   Papyrus Reader - Single File App v5
+   FIX: PDF Worker 3.x Stabil
    ======================================== */
 
 (function() {
@@ -18,17 +18,15 @@
                 return;
             }
             var attempts = 0;
-            var maxAttempts = 30;
             var interval = setInterval(function() {
                 attempts++;
                 if (typeof pdfjsLib !== 'undefined') {
                     clearInterval(interval);
                     console.log('✅ PDF.js tersedia');
                     resolve();
-                } else if (attempts >= maxAttempts) {
+                } else if (attempts >= 30) {
                     clearInterval(interval);
                     console.warn('⚠️ PDF.js tidak ditemukan');
-                    // Buat dummy
                     window.pdfjsLib = {
                         GlobalWorkerOptions: { workerSrc: '' },
                         getDocument: function() { throw new Error('PDF.js tidak tersedia'); }
@@ -47,14 +45,13 @@
                 return;
             }
             var attempts = 0;
-            var maxAttempts = 30;
             var interval = setInterval(function() {
                 attempts++;
                 if (typeof JSZip !== 'undefined') {
                     clearInterval(interval);
                     console.log('✅ JSZip tersedia');
                     resolve();
-                } else if (attempts >= maxAttempts) {
+                } else if (attempts >= 30) {
                     clearInterval(interval);
                     console.warn('⚠️ JSZip tidak ditemukan');
                     resolve();
@@ -64,7 +61,7 @@
     }
 
     // ============================================================
-    // 1. DATABASE LAYER (Dexie)
+    // 1. DATABASE LAYER
     // ============================================================
 
     const db = new Dexie('PapyrusReader');
@@ -513,7 +510,7 @@
                     <div class="book-card" data-id="${book.id}">
                         <div class="book-cover">
                             <span>${icon}</span>
-                        <span class="format-badge">${book.format}</span>
+                            <span class="format-badge">${book.format}</span>
                             ${bookmarkCount > 0 ? '<span class="format-badge" style="right:60px;">🔖'+bookmarkCount+'</span>' : ''}
                         </div>
                         <div class="book-info">
@@ -575,7 +572,7 @@
     }
 
     // ============================================================
-    // 9. ENGINES (FIX EPUB + PDF WORKER)
+    // 9. ENGINES
     // ============================================================
 
     class BaseEngine {
@@ -594,7 +591,7 @@
         isLoaded() { return this.loaded; }
     }
 
-    // --- EPUB (fix: tunggu JSZip) ---
+    // --- EPUB ---
     class EPUBEngine extends BaseEngine {
         constructor(file) {
             super(file);
@@ -604,14 +601,10 @@
         }
         async load() {
             try {
-                // Tunggu JSZip tersedia
                 await waitForJSZip();
-
-                // Pastikan ePub tersedia
                 if (typeof ePub === 'undefined') {
                     throw new Error('epub.js tidak tersedia');
                 }
-
                 this.book = ePub(this.file);
                 await this.book.ready;
                 const meta = this.book.package.metadata;
@@ -645,7 +638,7 @@
         async getPage(pageNum) { return this.rawContent; }
     }
 
-    // --- PDF (fix worker loading) ---
+    // --- PDF (3.x) ---
     class PDFEngine extends BaseEngine {
         constructor(file) {
             super(file);
@@ -662,22 +655,9 @@
                     throw new Error('pdfjsLib tidak tersedia');
                 }
 
-                // Set worker dengan fallback
-                try {
-                    // Coba worker dari CDN utama
-                    pdfjsLib.GlobalWorkerOptions.workerSrc = 
-                        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js';
-                } catch (e) {
-                    console.warn('Gagal set worker default, coba fallback:', e);
-                    // Fallback: gunakan worker dari jsdelivr
-                    try {
-                        pdfjsLib.GlobalWorkerOptions.workerSrc = 
-                            'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.min.js';
-                    } catch (e2) {
-                        console.warn('Gagal set worker fallback:', e2);
-                        // Biarkan kosong, pdf.js akan mencoba sendiri
-                    }
-                }
+                // Worker sudah di-set di index.html, tapi kita set ulang untuk safety
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 
+                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
                 console.log('📄 Memuat PDF...');
                 const arrayBuffer = await this.file.arrayBuffer();
@@ -1074,7 +1054,7 @@
     }
 
     // ============================================================
-    // 12. FEATURES
+    // 12. FEATURES (Bookmark, Highlight, Search, Settings, TTS)
     // ============================================================
 
     class BookmarkFeature {
@@ -2067,14 +2047,13 @@
 
     async function init() {
         try {
-            // Tunggu semua library
             await Promise.all([waitForPDFJS(), waitForJSZip()]);
 
             loadTheme();
             getReaderSettings();
             await renderLibrary();
             await updateFooterStats();
-            console.log('📖 Papyrus Reader - v4 (FIX) siap!');
+            console.log('📖 Papyrus Reader - v5 (Stabil) siap!');
         } catch (error) {
             console.error('Gagal inisialisasi:', error);
             showToast('Gagal memuat aplikasi', 'error');
