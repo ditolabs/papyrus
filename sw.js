@@ -10,10 +10,14 @@ const PRECACHE_URLS = [
     '/app.js',
     '/manifest.json',
     '/assets/icons/icon-192.png',
-    '/assets/icons/icon-512.png'
+    '/assets/icons/icon-512.png',
+    // Libraries
+    'https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js',
+    'https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
 ];
 
-// Install - Precache assets
 self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(CACHE_NAME)
@@ -25,7 +29,6 @@ self.addEventListener('install', (event) => {
     );
 });
 
-// Activate - Clean old caches
 self.addEventListener('activate', (event) => {
     event.waitUntil(
         caches.keys()
@@ -40,12 +43,9 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// Fetch - Serve from cache, fallback to network
 self.addEventListener('fetch', (event) => {
-    // Skip non-GET requests
     if (event.request.method !== 'GET') return;
 
-    // Skip external CDN requests (biarkan network)
     const url = new URL(event.request.url);
     if (url.hostname !== self.location.hostname) {
         return;
@@ -58,10 +58,8 @@ self.addEventListener('fetch', (event) => {
                     return cachedResponse;
                 }
 
-                // Try network, cache for future
                 return fetch(event.request)
                     .then((response) => {
-                        // Cache successful responses
                         if (response && response.status === 200) {
                             const clone = response.clone();
                             caches.open(CACHE_NAME)
@@ -72,7 +70,6 @@ self.addEventListener('fetch', (event) => {
                         return response;
                     })
                     .catch(() => {
-                        // Offline fallback
                         return new Response('Offline - konten tidak tersedia', {
                             status: 503,
                             statusText: 'Service Unavailable'

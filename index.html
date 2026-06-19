@@ -10,8 +10,10 @@
     <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
     <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
     
-    <!-- Library -->
+    <!-- Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     
     <!-- Styles -->
     <link rel="stylesheet" href="style.css">
@@ -47,9 +49,7 @@
             </div>
 
             <!-- Books Grid -->
-            <div class="books-grid" id="booksGrid">
-                <!-- Buku akan dirender di sini oleh JavaScript -->
-            </div>
+            <div class="books-grid" id="booksGrid"></div>
 
             <!-- Empty State -->
             <div class="empty-state" id="emptyState">
@@ -60,6 +60,54 @@
             </div>
         </main>
 
+        <!-- ===== READER CONTAINER ===== -->
+        <div id="reader-container" class="reader-hidden">
+            <!-- Toolbar -->
+            <div class="reader-toolbar" id="readerToolbar">
+                <div class="toolbar-left">
+                    <button class="toolbar-btn" id="readerBack" title="Kembali ke perpustakaan">←</button>
+                    <button class="toolbar-btn" id="readerToc" title="Daftar Isi">☰</button>
+                    <button class="toolbar-btn" id="readerBookmark" title="Tandai halaman">🔖</button>
+                </div>
+                <div class="toolbar-center" id="readerPageInfo">
+                    <span id="pageIndicator">Hal 1 / 1</span>
+                </div>
+                <div class="toolbar-right">
+                    <button class="toolbar-btn" id="readerSettings" title="Pengaturan">⚙️</button>
+                    <button class="toolbar-btn" id="readerFullscreen" title="Layar penuh">⛶</button>
+                </div>
+            </div>
+
+            <!-- Flipbook Area -->
+            <div class="flipbook-wrapper" id="flipbookWrapper">
+                <div class="flipbook" id="flipbook">
+                    <div class="page page-left" id="pageLeft"></div>
+                    <div class="page page-right" id="pageRight"></div>
+                </div>
+                <!-- Tap zones -->
+                <div class="tap-zone tap-left" id="tapLeft"></div>
+                <div class="tap-zone tap-right" id="tapRight"></div>
+                <div class="tap-zone tap-center" id="tapCenter"></div>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="reader-progress" id="readerProgress">
+                <div class="progress-track">
+                    <div class="progress-fill" id="progressFill" style="width:0%"></div>
+                </div>
+            </div>
+
+            <!-- TOC Panel (slide-in) -->
+            <div class="side-panel" id="tocPanel">
+                <div class="panel-header">
+                    <h3>Daftar Isi</h3>
+                    <button class="panel-close" id="tocClose">✕</button>
+                </div>
+                <ul id="tocList"></ul>
+            </div>
+            <div class="panel-overlay" id="panelOverlay"></div>
+        </div>
+
         <!-- ===== FOOTER ===== -->
         <footer id="appFooter">
             <span class="footer-stats" id="footerStats">0 buku</span>
@@ -67,10 +115,26 @@
         </footer>
     </div>
 
-    <!-- ===== HIDDEN FILE INPUT ===== -->
+    <!-- Hidden file input -->
     <input type="file" id="fileInput" accept=".epub,.pdf,.txt,.md" multiple style="display:none">
 
-    <!-- ===== MAIN SCRIPT ===== -->
+    <!-- ===== SCRIPTS ===== -->
+    <!-- Utility -->
+    <script src="js/utils/helpers.js"></script>
+    
+    <!-- Engines -->
+    <script src="js/engines/base.js"></script>
+    <script src="js/engines/epub.js"></script>
+    <script src="js/engines/pdf.js"></script>
+    <script src="js/engines/txt.js"></script>
+    <script src="js/engines/markdown.js"></script>
+    
+    <!-- Core -->
+    <script src="js/paginator.js"></script>
+    <script src="js/flipbook.js"></script>
+    <script src="js/reader.js"></script>
+    
+    <!-- Main App -->
     <script src="app.js"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 /* ========================================
    Papyrus Reader - Main Application
-   Fase 1: Foundation
+   Fase 2: Foundation + Reader Integration
    ======================================== */
 
 (function() {
@@ -13,7 +13,7 @@
     const db = new Dexie('PapyrusReader');
 
     db.version(1).stores({
-        books: '++id, title, author, format, fileName, fileSize, addedAt, lastRead',
+        books: '++id, title, author, format, fileName, fileSize, addedAt, lastRead, totalPages',
         progress: '++id, bookId, page, percentage, lastReadAt',
         settings: 'key'
     });
@@ -78,7 +78,6 @@
         if (saved && THEMES.includes(saved)) {
             applyTheme(saved);
         } else {
-            // Deteksi preferensi sistem
             const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
             applyTheme(prefersDark ? 'dark' : 'light');
         }
@@ -94,7 +93,6 @@
     // ========================================
 
     function showToast(message, type = 'info') {
-        // Hapus toast sebelumnya
         const existing = document.querySelector('.toast-container');
         if (existing) existing.remove();
 
@@ -108,7 +106,6 @@
         container.appendChild(toast);
         document.body.appendChild(container);
 
-        // Auto remove setelah animasi
         setTimeout(() => {
             if (container.parentNode) {
                 container.remove();
@@ -123,7 +120,6 @@
     async function getAllBooks() {
         try {
             const books = await db.books.toArray();
-            // Sort by lastRead (newest first)
             books.sort((a, b) => (b.lastRead || 0) - (a.lastRead || 0));
             return books;
         } catch (error) {
@@ -165,7 +161,6 @@
     async function deleteBook(id) {
         try {
             await db.books.delete(id);
-            // Hapus progress terkait
             await db.progress.where('bookId').equals(id).delete();
         } catch (error) {
             console.error('Gagal hapus buku:', error);
@@ -193,10 +188,9 @@
                 });
             }
 
-            // Update lastRead di buku
             await db.books.update(bookId, { lastRead: Date.now() });
-
             return { page, percentage };
+
         } catch (error) {
             console.error('Gagal simpan progress:', error);
             return null;
@@ -216,7 +210,6 @@
     // 7. FILE UPLOAD & PARSING
     // ========================================
 
-    // Format yang didukung
     const SUPPORTED_FORMATS = {
         'epub': 'EPUB',
         'pdf': 'PDF',
@@ -226,8 +219,7 @@
     };
 
     function getFileExtension(filename) {
-        const ext = filename.split('.').pop().toLowerCase();
-        return ext;
+        return filename.split('.').pop().toLowerCase();
     }
 
     function getFormatLabel(filename) {
@@ -246,41 +238,24 @@
         return (size / 1048576).toFixed(1) + ' MB';
     }
 
-    // Parser sederhana untuk metadata
     async function parseBookMetadata(file) {
         const format = getFormatLabel(file.name);
-        const ext = getFileExtension(file.name);
-
         let title = file.name.replace(/\.[^.]+$/, '');
         let author = '';
-
-        // Coba ekstrak dari PDF
-        if (ext === 'pdf') {
-            try {
-                // Gunakan PDF.js untuk metadata
-                // Note: PDF.js akan di-load saat dibutuhkan
-                const arrayBuffer = await file.arrayBuffer();
-                // Simpan sementara, nanti di parse saat reader
-            } catch (e) {
-                // Abaikan
-            }
-        }
-
-        // Untuk EPUB, kita akan parse saat reader dibuka
 
         return {
             title: title || 'Tanpa Judul',
             author: author || 'Tanpa Penulis',
-            format: format || ext.toUpperCase(),
+            format: format || 'Unknown',
             fileName: file.name,
             fileSize: file.size,
             fileSizeFormatted: getFileSize(file.size),
-            addedAt: Date.now()
+            addedAt: Date.now(),
+            totalPages: 0
         };
     }
 
     async function handleFileUpload(file) {
-        // Validasi
         if (!isSupported(file.name)) {
             const ext = getFileExtension(file.name);
             showToast(`Format .${ext} tidak didukung. Support: EPUB, PDF, TXT, MD`, 'error');
@@ -288,7 +263,6 @@
         }
 
         try {
-            // Cek duplikat (berdasarkan nama dan ukuran)
             const existing = await db.books
                 .where('fileName')
                 .equals(file.name)
@@ -300,21 +274,17 @@
                 return false;
             }
 
-            // Parse metadata dasar
             const meta = await parseBookMetadata(file);
-
-            // Simpan file sebagai Blob
             const bookData = {
                 ...meta,
-                file: file, // Blob
+                file: file,
                 lastRead: null
             };
 
             const id = await saveBook(bookData);
             showToast(`✅ "${meta.title}" berhasil ditambahkan`, 'success');
-
-            // Refresh library
             await renderLibrary();
+            await updateFooterStats();
             return true;
 
         } catch (error) {
@@ -333,12 +303,6 @@
             const books = await getAllBooks();
             state.books = books;
 
-            // Update footer
-            const totalBooks = books.length;
-            const totalPages = books.reduce((sum, b) => sum + (b.totalPages || 0), 0);
-            dom.footerStats.textContent = `${totalBooks} buku${totalBooks > 1 ? '' : ''} · ${totalPages} halaman`;
-
-            // Tampilkan empty state jika tidak ada buku
             if (books.length === 0) {
                 dom.booksGrid.innerHTML = '';
                 dom.dropzone.style.display = 'block';
@@ -351,7 +315,6 @@
             dom.dropzone.style.display = 'block';
             dom.emptyState.classList.remove('visible');
 
-            // Render cards
             let html = '';
             for (const book of books) {
                 const progress = await getProgress(book.id);
@@ -359,7 +322,6 @@
                 const page = progress?.page || 0;
                 const totalPages = book.totalPages || 0;
 
-                // Format icon berdasarkan format
                 const formatIcons = {
                     'EPUB': '📘',
                     'PDF': '📕',
@@ -368,7 +330,6 @@
                 };
                 const icon = formatIcons[book.format] || '📖';
 
-                // Last read date
                 let lastReadText = 'Belum dibaca';
                 if (book.lastRead) {
                     const date = new Date(book.lastRead);
@@ -410,24 +371,19 @@
 
             dom.booksGrid.innerHTML = html;
 
-            // Event listeners untuk card
             dom.booksGrid.querySelectorAll('.book-card').forEach(card => {
                 const id = parseInt(card.dataset.id);
 
-                // Klik pada card (kecuali tombol) = Baca
                 card.addEventListener('click', (e) => {
-                    // Jika klik pada tombol, jangan trigger
                     if (e.target.closest('.book-actions')) return;
                     openReader(id);
                 });
 
-                // Tombol Baca
                 card.querySelector('[data-action="read"]').addEventListener('click', (e) => {
                     e.stopPropagation();
                     openReader(id);
                 });
 
-                // Tombol Hapus
                 card.querySelector('[data-action="delete"]').addEventListener('click', async (e) => {
                     e.stopPropagation();
                     if (confirm(`Hapus buku "${card.querySelector('.book-title').textContent}"?`)) {
@@ -435,6 +391,7 @@
                             await deleteBook(id);
                             showToast('Buku dihapus', 'info');
                             await renderLibrary();
+                            await updateFooterStats();
                         } catch (error) {
                             showToast('Gagal hapus buku', 'error');
                         }
@@ -449,8 +406,10 @@
     }
 
     // ========================================
-    // 9. READER (Placeholder untuk Fase 2)
+    // 9. READER - FASE 2 INTEGRATION
     // ========================================
+
+    let readerInstance = null;
 
     async function openReader(bookId) {
         const book = await getBook(bookId);
@@ -459,27 +418,55 @@
             return;
         }
 
-        // Untuk Fase 1, kita hanya preview
-        const progress = await getProgress(bookId);
-        const page = progress?.page || 1;
-        const totalPages = book.totalPages || '?';
+        if (readerInstance) {
+            readerInstance.close();
+            readerInstance = null;
+        }
 
-        showToast(`📖 Membuka "${book.title}" - Halaman ${page}/${totalPages}`, 'info');
+        readerInstance = new Reader({
+            container: document.getElementById('reader-container'),
+            toolbar: document.getElementById('readerToolbar'),
+            pageIndicator: document.getElementById('pageIndicator'),
+            progressFill: document.getElementById('progressFill'),
+            tocList: document.getElementById('tocList'),
+            tocPanel: document.getElementById('tocPanel'),
+            panelOverlay: document.getElementById('panelOverlay'),
+            onClose: () => {
+                readerInstance = null;
+                renderLibrary();
+                updateFooterStats();
+            },
+            onProgress: async () => {
+                renderLibrary();
+            }
+        });
 
-        // TODO: Fase 2 - Implementasi reader sebenarnya
-        console.log(`Membuka buku: ${book.title} (${book.format})`);
-        console.log(`Progress: halaman ${page} dari ${totalPages}`);
-        console.log('File:', book.file);
+        try {
+            await readerInstance.open(book);
+        } catch (error) {
+            console.error('Gagal membuka buku:', error);
+            showToast('Gagal membuka buku: ' + error.message, 'error');
+            readerInstance = null;
+        }
     }
 
     // ========================================
-    // 10. EVENT BINDING
+    // 10. FOOTER STATS
     // ========================================
 
-    // --- Theme ---
+    async function updateFooterStats() {
+        const books = await getAllBooks();
+        const totalBooks = books.length;
+        const totalPages = books.reduce((sum, b) => sum + (b.totalPages || 0), 0);
+        dom.footerStats.textContent = `${totalBooks} buku · ${totalPages} halaman`;
+    }
+
+    // ========================================
+    // 11. EVENT BINDING
+    // ========================================
+
     dom.themeToggle.addEventListener('click', toggleTheme);
 
-    // --- Upload ---
     dom.uploadBtn.addEventListener('click', () => dom.fileInput.click());
     dom.emptyUploadBtn.addEventListener('click', () => dom.fileInput.click());
 
@@ -490,11 +477,9 @@
         for (const file of files) {
             await handleFileUpload(file);
         }
-
         dom.fileInput.value = '';
     });
 
-    // --- Drag & Drop ---
     dom.dropzone.addEventListener('dragover', (e) => {
         e.preventDefault();
         dom.dropzone.classList.add('drag-over');
@@ -517,23 +502,17 @@
         }
     });
 
-    // Klik dropzone juga trigger upload (kecuali jika ada file di dalam)
     dom.dropzone.addEventListener('click', (e) => {
-        // Jangan trigger jika klik pada anak-anak (untuk menghindari double)
         if (e.target === dom.dropzone || e.target.closest('.dropzone-content')) {
             dom.fileInput.click();
         }
     });
 
-    // --- Keyboard Shortcuts ---
     document.addEventListener('keydown', (e) => {
-        // Ctrl+O = Upload
         if (e.ctrlKey && e.key === 'o') {
             e.preventDefault();
             dom.fileInput.click();
         }
-
-        // Ctrl+Shift+D = Toggle dark mode
         if (e.ctrlKey && e.shiftKey && e.key === 'D') {
             e.preventDefault();
             toggleTheme();
@@ -541,30 +520,24 @@
     });
 
     // ========================================
-    // 11. INITIALIZATION
+    // 12. INITIALIZATION
     // ========================================
 
     async function init() {
         try {
-            // Load theme
             loadTheme();
-
-            // Render library
             await renderLibrary();
-
-            console.log('📖 Papyrus Reader - Fase 1 Foundation siap!');
+            await updateFooterStats();
+            console.log('📖 Papyrus Reader - Fase 2 siap!');
             console.log(`📚 ${state.books.length} buku di perpustakaan`);
-
         } catch (error) {
             console.error('Gagal inisialisasi:', error);
             showToast('Gagal memuat aplikasi', 'error');
         }
     }
 
-    // Jalankan
     init();
 
-    // Expose untuk debugging (opsional)
     window.__Papyrus = {
         db,
         state,
@@ -577,7 +550,9 @@
         getProgress,
         renderLibrary,
         handleFileUpload,
-        showToast
+        showToast,
+        openReader,
+        updateFooterStats
     };
 
 })();
