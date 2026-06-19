@@ -1,23 +1,37 @@
 /* ========================================
    Papyrus Reader - Main Application
-   Fase 3: + Bookmark, Highlight, Search, Settings, TTS
+   Fase 3: Final - Fixed
    ======================================== */
 
 (function() {
     'use strict';
 
     // ========================================
-    // 1. DATABASE LAYER (Dexie.js) - UPDATED
+    // 1. DATABASE LAYER (Dexie.js) - FIXED
     // ========================================
 
     const db = new Dexie('PapyrusReader');
 
+    // Version 1 - dasar
+    db.version(1).stores({
+        books: '++id, title, author, format, fileName, fileSize, addedAt, lastRead, totalPages',
+        progress: '++id, bookId, page, percentage, lastReadAt'
+    });
+
+    // Version 2 - tambah bookmark, highlight, settings
     db.version(2).stores({
         books: '++id, title, author, format, fileName, fileSize, addedAt, lastRead, totalPages',
         progress: '++id, bookId, page, percentage, lastReadAt',
         bookmarks: '++id, bookId, page, note, createdAt',
         highlights: '++id, bookId, page, text, note, createdAt, color',
         settings: 'key'
+    }).upgrade(tx => {
+        console.log('📦 Migrasi database ke version 2 selesai');
+    });
+
+    // Buka database
+    db.open().catch(err => {
+        console.error('❌ Gagal buka database:', err);
     });
 
     // ========================================
@@ -76,7 +90,6 @@
         state.currentTheme = theme;
         dom.themeIcon.textContent = THEME_ICONS[theme];
         localStorage.setItem('papyrus-theme', theme);
-        // Update theme buttons di settings
         document.querySelectorAll('.theme-btn').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.theme === theme);
         });
@@ -321,7 +334,6 @@
     function saveReaderSettings(settings) {
         state.readerSettings = { ...state.readerSettings, ...settings };
         localStorage.setItem('papyrus-reader-settings', JSON.stringify(state.readerSettings));
-        // Update reader jika sedang terbuka
         if (readerInstance) {
             readerInstance.applySettings(state.readerSettings);
         }
@@ -455,7 +467,6 @@
                     else lastReadText = date.toLocaleDateString('id-ID');
                 }
 
-                // Hitung bookmark & highlight count
                 const bookmarkCount = await db.bookmarks.where('bookId').equals(book.id).count();
                 const highlightCount = await db.highlights.where('bookId').equals(book.id).count();
 
@@ -525,66 +536,86 @@
     }
 
     // ========================================
-    // 12. READER - FASE 3 INTEGRATION
+    // 12. READER - FIXED (dengan logging & error handling)
     // ========================================
 
     let readerInstance = null;
 
     async function openReader(bookId) {
-        const book = await getBook(bookId);
-        if (!book) {
-            showToast('Buku tidak ditemukan', 'error');
-            return;
-        }
-
-        if (readerInstance) {
-            readerInstance.close();
-            readerInstance = null;
-        }
-
-        readerInstance = new Reader({
-            container: document.getElementById('reader-container'),
-            toolbar: document.getElementById('readerToolbar'),
-            pageIndicator: document.getElementById('pageIndicator'),
-            progressFill: document.getElementById('progressFill'),
-            tocList: document.getElementById('tocList'),
-            tocPanel: document.getElementById('tocPanel'),
-            bookmarkPanel: document.getElementById('bookmarkPanel'),
-            bookmarkList: document.getElementById('bookmarkList'),
-            highlightPanel: document.getElementById('highlightPanel'),
-            highlightList: document.getElementById('highlightList'),
-            searchPanel: document.getElementById('searchPanel'),
-            searchInput: document.getElementById('searchInput'),
-            searchResults: document.getElementById('searchResults'),
-            settingsPanel: document.getElementById('settingsPanel'),
-            panelOverlay: document.getElementById('panelOverlay'),
-            onClose: () => {
-                readerInstance = null;
-                renderLibrary();
-                updateFooterStats();
-            },
-            onProgress: async () => {
-                renderLibrary();
-            },
-            db: db,
-            getBookmarks: getBookmarks,
-            addBookmark: addBookmark,
-            removeBookmark: removeBookmark,
-            getHighlights: getHighlights,
-            addHighlight: addHighlight,
-            removeHighlight: removeHighlight,
-            updateHighlight: updateHighlight,
-            getReaderSettings: getReaderSettings,
-            saveReaderSettings: saveReaderSettings,
-            showToast: showToast
-        });
-
+        console.log('📖 Membuka buku ID:', bookId);
+        
         try {
+            const book = await getBook(bookId);
+            if (!book) {
+                showToast('Buku tidak ditemukan', 'error');
+                console.error('❌ Buku tidak ditemukan:', bookId);
+                return;
+            }
+            console.log('📚 Data buku:', book.title, book.format);
+
+            if (readerInstance) {
+                readerInstance.close();
+                readerInstance = null;
+            }
+
+            // Validasi elemen
+            const container = document.getElementById('reader-container');
+            if (!container) {
+                console.error('❌ reader-container tidak ditemukan');
+                showToast('Error: reader-container tidak ditemukan', 'error');
+                return;
+            }
+
+            console.log('✅ Membuat instance Reader...');
+            readerInstance = new Reader({
+                container: container,
+                toolbar: document.getElementById('readerToolbar'),
+                pageIndicator: document.getElementById('pageIndicator'),
+                progressFill: document.getElementById('progressFill'),
+                tocList: document.getElementById('tocList'),
+                tocPanel: document.getElementById('tocPanel'),
+                bookmarkPanel: document.getElementById('bookmarkPanel'),
+                bookmarkList: document.getElementById('bookmarkList'),
+                highlightPanel: document.getElementById('highlightPanel'),
+                highlightList: document.getElementById('highlightList'),
+                searchPanel: document.getElementById('searchPanel'),
+                searchInput: document.getElementById('searchInput'),
+                searchResults: document.getElementById('searchResults'),
+                settingsPanel: document.getElementById('settingsPanel'),
+                panelOverlay: document.getElementById('panelOverlay'),
+                onClose: () => {
+                    console.log('📖 Reader ditutup');
+                    readerInstance = null;
+                    renderLibrary();
+                    updateFooterStats();
+                },
+                onProgress: async () => {
+                    renderLibrary();
+                },
+                db: db,
+                getBookmarks: getBookmarks,
+                addBookmark: addBookmark,
+                removeBookmark: removeBookmark,
+                getHighlights: getHighlights,
+                addHighlight: addHighlight,
+                removeHighlight: removeHighlight,
+                updateHighlight: updateHighlight,
+                getReaderSettings: getReaderSettings,
+                saveReaderSettings: saveReaderSettings,
+                showToast: showToast
+            });
+
+            console.log('✅ Reader instance dibuat, membuka buku...');
             await readerInstance.open(book);
+            console.log('✅ Buku berhasil dibuka');
+
         } catch (error) {
-            console.error('Gagal membuka buku:', error);
+            console.error('❌ Gagal membuka buku:', error);
             showToast('Gagal membuka buku: ' + error.message, 'error');
-            readerInstance = null;
+            if (readerInstance) {
+                readerInstance.close();
+                readerInstance = null;
+            }
         }
     }
 
@@ -664,10 +695,10 @@
     async function init() {
         try {
             loadTheme();
-            getReaderSettings(); // Load settings
+            getReaderSettings();
             await renderLibrary();
             await updateFooterStats();
-            console.log('📖 Papyrus Reader - Fase 3 siap!');
+            console.log('📖 Papyrus Reader - Fase 3 Final siap!');
             console.log(`📚 ${state.books.length} buku di perpustakaan`);
         } catch (error) {
             console.error('Gagal inisialisasi:', error);

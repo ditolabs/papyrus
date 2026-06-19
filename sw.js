@@ -1,5 +1,6 @@
 /* ========================================
    Papyrus Reader - Service Worker
+   Fase 3 Final
    ======================================== */
 
 const CACHE_NAME = 'papyrus-v1';

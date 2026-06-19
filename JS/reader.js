@@ -1,10 +1,16 @@
 /* ========================================
    Reader - Main Reader Controller
-   Fase 3: + Bookmark, Highlight, Search, Settings, TTS
+   Fase 3 Final - Fixed Constructor
    ======================================== */
 
 class Reader {
     constructor(options) {
+        console.log('🔧 Reader constructor dipanggil');
+        
+        // Validasi
+        if (!options.container) throw new Error('container is required');
+        if (!options.db) throw new Error('db is required');
+        
         // DOM refs
         this.container = options.container;
         this.toolbar = options.toolbar;
@@ -59,6 +65,7 @@ class Reader {
 
         // Bind events
         this._bindEvents();
+        console.log('✅ Reader constructor selesai');
     }
 
     async open(bookData, progressCallback = null) {
@@ -119,7 +126,6 @@ class Reader {
     }
 
     close() {
-        // Stop TTS jika berjalan
         if (this.ttsFeature && this.ttsFeature.isPlaying) {
             this.ttsFeature.stop();
         }
@@ -183,9 +189,6 @@ class Reader {
             el.style.padding = (settings.margin || 36) + 'px';
             el.style.textAlign = settings.alignment || 'justify';
         });
-
-        // Re-paginate jika perlu? Untuk sederhana, kita update style saja.
-        // Untuk paginasi ulang butuh rebuild yang kompleks.
     }
 
     // ==================== Private Methods ====================
@@ -316,7 +319,6 @@ class Reader {
             applySettings: (settings) => this.applySettings(settings),
             showToast: this.showToast,
             themeToggle: (theme) => {
-                // Panggil fungsi theme dari app.js
                 if (window.__Papyrus && window.__Papyrus.applyTheme) {
                     window.__Papyrus.applyTheme(theme);
                 }
@@ -380,7 +382,6 @@ class Reader {
         this._updateUI();
         this._saveProgress();
 
-        // Update highlight di halaman
         if (this.highlightFeature) {
             setTimeout(() => {
                 this.highlightFeature.applyToPage();
@@ -499,7 +500,6 @@ class Reader {
         document.getElementById('readerBack').addEventListener('click', () => this.close());
         document.getElementById('readerFullscreen').addEventListener('click', () => this.toggleFullscreen());
 
-        // Panel overlay close
         this.panelOverlay.addEventListener('click', () => this._closeAllPanels());
 
         window.addEventListener('resize', () => {
@@ -508,7 +508,6 @@ class Reader {
             }
         });
 
-        // Mouse wheel horizontal scroll prevention
         document.getElementById('flipbookWrapper').addEventListener('wheel', (e) => {
             if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
                 e.preventDefault();
