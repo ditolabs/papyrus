@@ -1,2 +1,0 @@
-# papyrus
-digital book reader
