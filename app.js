@@ -1,10 +1,70 @@
 /* ========================================
-   Papyrus Reader - Single File App v2
-   FIX: PDF Engine & Rendering
+   Papyrus Reader - Single File App v3
+   FIX: PDF.js fallback loading
    ======================================== */
 
 (function() {
     'use strict';
+
+    // ============================================================
+    // 0. WAIT FOR PDF.JS LOADING
+    // ============================================================
+
+    // Tunggu PDF.js selesai dimuat
+    function waitForPDFJS() {
+        return new Promise(function(resolve) {
+            if (typeof pdfjsLib !== 'undefined') {
+                console.log('✅ PDF.js sudah tersedia');
+                resolve();
+                return;
+            }
+
+            // Coba cek setiap 200ms selama 10 detik
+            var attempts = 0;
+            var maxAttempts = 50;
+            var interval = setInterval(function() {
+                attempts++;
+                if (typeof pdfjsLib !== 'undefined') {
+                    clearInterval(interval);
+                    console.log('✅ PDF.js tersedia setelah', attempts * 200, 'ms');
+                    resolve();
+                } else if (attempts >= maxAttempts) {
+                    clearInterval(interval);
+                    console.warn('⚠️ PDF.js tidak ditemukan, menggunakan fallback manual');
+                    // Coba load manual
+                    var script = document.createElement('script');
+                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.min.js';
+                    script.onload = function() {
+                        if (typeof pdfjsLib !== 'undefined') {
+                            console.log('✅ PDF.js dimuat via fallback');
+                            resolve();
+                        } else {
+                            // Buat dummy pdfjsLib agar tidak error
+                            window.pdfjsLib = {
+                                GlobalWorkerOptions: { workerSrc: '' },
+                                getDocument: function() {
+                                    throw new Error('PDF.js tidak tersedia');
+                                }
+                            };
+                            console.error('❌ PDF.js gagal dimuat, PDF tidak akan berfungsi');
+                            resolve();
+                        }
+                    };
+                    script.onerror = function() {
+                        window.pdfjsLib = {
+                            GlobalWorkerOptions: { workerSrc: '' },
+                            getDocument: function() {
+                                throw new Error('PDF.js tidak tersedia');
+                            }
+                        };
+                        console.error('❌ PDF.js gagal dimuat');
+                        resolve();
+                    };
+                    document.head.appendChild(script);
+                }
+            }, 200);
+        });
+    }
 
     // ============================================================
     // 1. DATABASE LAYER (Dexie)
@@ -518,7 +578,7 @@
     }
 
     // ============================================================
-    // 9. ENGINES (FIX PDF)
+    // 9. ENGINES (FIX PDF - dengan fallback)
     // ============================================================
 
     class BaseEngine {
@@ -579,7 +639,7 @@
         async getPage(pageNum) { return this.rawContent; }
     }
 
-    // --- PDF (FIXED) ---
+    // --- PDF (FIXED - dengan pengecekan pdfjsLib) ---
     class PDFEngine extends BaseEngine {
         constructor(file) {
             super(file);
@@ -590,19 +650,28 @@
 
         async load() {
             try {
-                if (typeof pdfjsLib === 'undefined') {
-                    throw new Error('pdfjsLib tidak ditemukan. Pastikan PDF.js dimuat.');
+                // Tunggu PDF.js tersedia
+                await waitForPDFJS();
+
+                if (typeof pdfjsLib === 'undefined' || !pdfjsLib.getDocument) {
+                    throw new Error('pdfjsLib tidak tersedia. Pastikan PDF.js dimuat.');
                 }
 
-                pdfjsLib.GlobalWorkerOptions.workerSrc = 
-                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js';
+                // Set worker
+                try {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 
+                        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.8.69/pdf.worker.min.js';
+                } catch (e) {
+                    console.warn('Gagal set worker PDF:', e);
+                }
 
                 console.log('📄 Memuat PDF...');
                 const arrayBuffer = await this.file.arrayBuffer();
                 const loadingTask = pdfjsLib.getDocument({ 
                     data: arrayBuffer,
                     useSystemFonts: true,
-                    disableFontFace: false
+                    disableFontFace: false,
+                    enableXfa: false
                 });
                 
                 this.pdfDoc = await loadingTask.promise;
@@ -632,7 +701,6 @@
                 throw new Error('Halaman tidak valid: ' + pageNum);
             }
 
-            // Cache
             if (this.renderedPages[pageNum]) {
                 return this.renderedPages[pageNum];
             }
@@ -645,13 +713,8 @@
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
                 
-                const ratio = 1; // sederhana untuk performa
-                canvas.width = viewport.width * ratio;
-                canvas.height = viewport.height * ratio;
-                canvas.style.width = viewport.width + 'px';
-                canvas.style.height = viewport.height + 'px';
-                
-                context.scale(ratio, ratio);
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
 
                 const renderContext = {
                     canvasContext: context,
@@ -997,7 +1060,7 @@
     }
 
     // ============================================================
-    // 12. FEATURES
+    // 12. FEATURES (Bookmark, Highlight, Search, Settings, TTS)
     // ============================================================
 
     class BookmarkFeature {
@@ -1435,7 +1498,7 @@
     }
 
     // ============================================================
-    // 13. READER (FIX PDF PREPARATION)
+    // 13. READER
     // ============================================================
 
     let readerInstance = null;
@@ -1505,8 +1568,6 @@
             try {
                 this.container.classList.remove('reader-hidden');
                 this.container.classList.add('reader-visible');
-                // Fullscreen dinonaktifkan sementara untuk debugging
-                // this._requestFullscreen();
 
                 this.engine = this._createEngine(bookData);
                 await this.engine.load();
@@ -1630,7 +1691,6 @@
             await this.db.books.update(this.bookId, { totalPages: this.totalPages });
         }
 
-        // --- FIX PDF ---
         async _preparePDFPages() {
             const total = this.engine.getTotalPages();
             this.totalPages = total;
@@ -1638,8 +1698,7 @@
 
             this.pages = new Array(total).fill(null);
 
-            // Render 2 halaman pertama
-            const maxRender = Math.min(4, total);
+            const maxRender = Math.min(2, total);
             const renderPromises = [];
             for (let i = 0; i < maxRender; i++) {
                 renderPromises.push(
@@ -1658,7 +1717,6 @@
             }
             await Promise.all(renderPromises);
 
-            // Placeholder untuk halaman lain
             for (let i = maxRender; i < total; i++) {
                 this.pages[i] = `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
                     <p>⏳ Memuat halaman ${i+1}...</p>
@@ -1995,11 +2053,14 @@
 
     async function init() {
         try {
+            // Tunggu PDF.js terload dulu
+            await waitForPDFJS();
+            
             loadTheme();
             getReaderSettings();
             await renderLibrary();
             await updateFooterStats();
-            console.log('📖 Papyrus Reader - v2 (FIX PDF) siap!');
+            console.log('📖 Papyrus Reader - v3 (FIX PDF) siap!');
         } catch (error) {
             console.error('Gagal inisialisasi:', error);
             showToast('Gagal memuat aplikasi', 'error');
