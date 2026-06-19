@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#1a1814">
+    <meta name="description" content="Papyrus Reader - Aplikasi pembaca buku digital berbagai format">
+    <title>Papyrus Reader</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
+    <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+    
+    <!-- Library -->
+    <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- ===== HEADER ===== -->
+        <header id="appHeader">
+            <div class="logo">
+                <span class="logo-icon">📖</span>
+                <span class="logo-text">Papyrus</span>
+            </div>
+            <div class="header-actions">
+                <button class="btn-icon" id="themeToggle" title="Ganti tema" aria-label="Ganti tema">
+                    <span id="themeIcon">🌙</span>
+                </button>
+                <button class="btn-icon" id="uploadBtn" title="Tambah buku" aria-label="Tambah buku">
+                    <span>＋</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- ===== LIBRARY ===== -->
+        <main id="library">
+            <!-- Drop Zone -->
+            <div class="dropzone" id="dropzone">
+                <div class="dropzone-content">
+                    <div class="dropzone-icon">📚</div>
+                    <h3>Seret &amp; Lepas Buku di Sini</h3>
+                    <p>Support: EPUB, PDF, TXT, Markdown</p>
+                    <span class="dropzone-hint">atau klik tombol + di atas</span>
+                </div>
+            </div>
+
+            <!-- Books Grid -->
+            <div class="books-grid" id="booksGrid">
+                <!-- Buku akan dirender di sini oleh JavaScript -->
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state" id="emptyState">
+                <div class="empty-icon">📕</div>
+                <h3>Belum Ada Buku</h3>
+                <p>Upload buku pertamamu untuk mulai membaca</p>
+                <button class="btn-primary" id="emptyUploadBtn">Upload Buku</button>
+            </div>
+        </main>
+
+        <!-- ===== FOOTER ===== -->
+        <footer id="appFooter">
+            <span class="footer-stats" id="footerStats">0 buku</span>
+            <span class="footer-version">Papyrus v1.0</span>
+        </footer>
+    </div>
+
+    <!-- ===== HIDDEN FILE INPUT ===== -->
+    <input type="file" id="fileInput" accept=".epub,.pdf,.txt,.md" multiple style="display:none">
+
+    <!-- ===== MAIN SCRIPT ===== -->
+    <script src="app.js"></script>
+</body>
+</html>
