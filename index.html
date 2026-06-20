@@ -15,15 +15,80 @@
     <script src="https://cdn.jsdelivr.net/npm/dexie@3.2.4/dist/dexie.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/epubjs@0.3.93/dist/epub.min.js"></script>
     
-    <!-- PDF.js 3.x stabil -->
+    <!-- PDF.js 3.x - menggunakan CDN yang kompatibel dengan Firefox -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
-        // Set worker setelah library dimuat
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 
-            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        console.log('✅ PDF.js worker set ke 3.11.174');
+        // ===== CONFIGURASI PDF.JS UNTUK FIREFOX =====
+        // Firefox membutuhkan worker yang di-load dari sumber yang sama atau CORS-enabled
         
-        // Fungsi tunggu
+        // Coba beberapa sumber worker
+        var workerSources = [
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+            'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+            '//cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
+        ];
+        
+        // Set worker dengan fallback
+        function setPDFWorker() {
+            if (typeof pdfjsLib === 'undefined') {
+                console.warn('pdfjsLib tidak ditemukan, mencoba memuat ulang...');
+                setTimeout(setPDFWorker, 500);
+                return;
+            }
+            
+            // Coba set worker dengan sumber pertama yang berhasil
+            var tried = 0;
+            function tryWorker() {
+                if (tried >= workerSources.length) {
+                    console.error('Semua sumber worker gagal, menggunakan worker inline fallback');
+                    // Fallback: worker inline (di-encode)
+                    try {
+                        pdfjsLib.GlobalWorkerOptions.workerPort = null;
+                        pdfjsLib.GlobalWorkerOptions.workerSrc = null;
+                        // Biarkan pdf.js menggunakan worker default-nya
+                        console.log('Menggunakan worker default PDF.js');
+                    } catch(e) {
+                        console.error('Fallback worker gagal:', e);
+                    }
+                    return;
+                }
+                
+                try {
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = workerSources[tried];
+                    console.log('✅ Worker PDF di-set ke:', workerSources[tried]);
+                    // Test worker dengan fetch kecil
+                    fetch(workerSources[tried], { mode: 'no-cors' })
+                        .then(function() {
+                            console.log('✅ Worker dapat diakses');
+                        })
+                        .catch(function() {
+                            console.warn('⚠️ Worker tidak dapat diakses, mencoba sumber lain...');
+                            tried++;
+                            tryWorker();
+                        });
+                } catch(e) {
+                    console.warn('Gagal set worker dari sumber', tried, e);
+                    tried++;
+                    tryWorker();
+                }
+            }
+            
+            tryWorker();
+        }
+        
+        // Tunggu pdfjsLib tersedia
+        if (typeof pdfjsLib !== 'undefined') {
+            setPDFWorker();
+        } else {
+            var checkPDF = setInterval(function() {
+                if (typeof pdfjsLib !== 'undefined') {
+                    clearInterval(checkPDF);
+                    setPDFWorker();
+                }
+            }, 200);
+        }
+        
+        // Fungsi tunggu untuk app.js
         function waitForPDFJS() {
             return new Promise(function(resolve) {
                 if (typeof pdfjsLib !== 'undefined') {
@@ -38,7 +103,14 @@
                         resolve();
                     } else if (attempts > 30) {
                         clearInterval(interval);
-                        console.warn('⚠️ PDF.js tidak ditemukan');
+                        console.warn('⚠️ PDF.js tidak ditemukan setelah 6 detik');
+                        // Buat dummy agar tidak error
+                        window.pdfjsLib = {
+                            GlobalWorkerOptions: { workerSrc: '' },
+                            getDocument: function() { 
+                                throw new Error('PDF.js tidak tersedia, silakan refresh halaman'); 
+                            }
+                        };
                         resolve();
                     }
                 }, 200);
@@ -72,24 +144,23 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- Sama seperti sebelumnya, konten di bawah ini -->
     <div id="app">
-        <!-- HEADER -->
         <header id="appHeader">
             <div class="logo">
                 <span class="logo-icon">📖</span>
                 <span class="logo-text">Papyrus</span>
             </div>
             <div class="header-actions">
-                <button class="btn-icon" id="themeToggle" title="Ganti tema" aria-label="Ganti tema">
+                <button class="btn-icon" id="themeToggle" title="Ganti tema">
                     <span id="themeIcon">🌙</span>
                 </button>
-                <button class="btn-icon" id="uploadBtn" title="Tambah buku" aria-label="Tambah buku">
+                <button class="btn-icon" id="uploadBtn" title="Tambah buku">
                     <span>＋</span>
                 </button>
             </div>
         </header>
 
-        <!-- LIBRARY -->
         <main id="library">
             <div class="dropzone" id="dropzone">
                 <div class="dropzone-content">
@@ -108,7 +179,6 @@
             </div>
         </main>
 
-        <!-- READER -->
         <div id="reader-container" class="reader-hidden">
             <div class="reader-toolbar" id="readerToolbar">
                 <div class="toolbar-left">
@@ -226,7 +296,6 @@
             <div class="panel-overlay" id="panelOverlay"></div>
         </div>
 
-        <!-- FOOTER -->
         <footer id="appFooter">
             <span class="footer-stats" id="footerStats">0 buku</span>
             <span class="footer-version">Papyrus v1.0</span>

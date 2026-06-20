@@ -1,6 +1,5 @@
 /* ========================================
-   Papyrus Reader - Single File App v5
-   FIX: PDF Worker 3.x Stabil
+   Papyrus Reader - Single File App v7 FINAL
    ======================================== */
 
 (function() {
@@ -22,14 +21,17 @@
                 attempts++;
                 if (typeof pdfjsLib !== 'undefined') {
                     clearInterval(interval);
-                    console.log('✅ PDF.js tersedia');
+                    console.log('✅ PDF.js tersedia setelah', attempts*200, 'ms');
                     resolve();
                 } else if (attempts >= 30) {
                     clearInterval(interval);
                     console.warn('⚠️ PDF.js tidak ditemukan');
+                    // Buat dummy agar tidak error
                     window.pdfjsLib = {
                         GlobalWorkerOptions: { workerSrc: '' },
-                        getDocument: function() { throw new Error('PDF.js tidak tersedia'); }
+                        getDocument: function() { 
+                            throw new Error('PDF.js tidak tersedia, silakan refresh halaman'); 
+                        }
                     };
                     resolve();
                 }
@@ -638,7 +640,7 @@
         async getPage(pageNum) { return this.rawContent; }
     }
 
-    // --- PDF (3.x) ---
+    // --- PDF (dengan fallback worker) ---
     class PDFEngine extends BaseEngine {
         constructor(file) {
             super(file);
@@ -655,9 +657,17 @@
                     throw new Error('pdfjsLib tidak tersedia');
                 }
 
-                // Worker sudah di-set di index.html, tapi kita set ulang untuk safety
-                pdfjsLib.GlobalWorkerOptions.workerSrc = 
-                    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                // Set worker dengan metode yang lebih aman untuk Firefox
+                try {
+                    // Coba set worker ke null terlebih dahulu (gunakan default)
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = null;
+                    // Kemudian coba set dengan URL yang benar
+                    pdfjsLib.GlobalWorkerOptions.workerSrc = 
+                        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                    console.log('✅ Worker PDF di-set');
+                } catch(e) {
+                    console.warn('Gagal set worker, menggunakan default:', e);
+                }
 
                 console.log('📄 Memuat PDF...');
                 const arrayBuffer = await this.file.arrayBuffer();
@@ -665,7 +675,10 @@
                     data: arrayBuffer,
                     useSystemFonts: true,
                     disableFontFace: false,
-                    enableXfa: false
+                    enableXfa: false,
+                    // Gunakan worker dengan setting yang lebih toleran
+                    useWorkerFetch: false,
+                    isEvalSupported: true
                 });
                 
                 this.pdfDoc = await loadingTask.promise;
@@ -685,7 +698,14 @@
 
             } catch (error) {
                 console.error('❌ Gagal load PDF:', error);
-                throw new Error('Gagal memuat file PDF: ' + error.message);
+                // Tampilkan pesan yang lebih informatif
+                let msg = 'Gagal memuat file PDF';
+                if (error.message && error.message.includes('worker')) {
+                    msg += ': Browser mungkin memblokir worker. Coba gunakan Chrome atau refresh halaman.';
+                } else {
+                    msg += ': ' + error.message;
+                }
+                throw new Error(msg);
             }
         }
 
@@ -727,6 +747,7 @@
                 console.error(`❌ Gagal render halaman ${pageNum}:`, error);
                 return `<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-muted);">
                     <p>⚠️ Gagal render halaman ${pageNum}</p>
+                    <p style="font-size:0.8rem;margin-top:8px;">${error.message || ''}</p>
                 </div>`;
             }
         }
@@ -1054,7 +1075,7 @@
     }
 
     // ============================================================
-    // 12. FEATURES (Bookmark, Highlight, Search, Settings, TTS)
+    // 12. FEATURES - DISEDERHANAKAN
     // ============================================================
 
     class BookmarkFeature {
@@ -2053,7 +2074,7 @@
             getReaderSettings();
             await renderLibrary();
             await updateFooterStats();
-            console.log('📖 Papyrus Reader - v5 (Stabil) siap!');
+            console.log('📖 Papyrus Reader - v7 FINAL siap!');
         } catch (error) {
             console.error('Gagal inisialisasi:', error);
             showToast('Gagal memuat aplikasi', 'error');
